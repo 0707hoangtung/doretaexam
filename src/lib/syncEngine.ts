@@ -69,55 +69,73 @@ async function postSyncMutation(type: string, data: any): Promise<boolean> {
 // -------------------------------------------------------------
 
 export async function serverUpsertExam(exam: Exam): Promise<void> {
-  // 1. Post to Server (instant broadcast to all devices and tabs via SSE)
-  postSyncMutation('UPSERT_EXAM', exam);
-  // 2. Dual-sync to Firestore in background
-  saveExamToCloud(exam).catch(() => {});
+  await Promise.allSettled([
+    postSyncMutation('UPSERT_EXAM', exam),
+    saveExamToCloud(exam),
+  ]);
 }
 
 export async function serverDeleteExam(examId: string): Promise<void> {
-  postSyncMutation('DELETE_EXAM', { id: examId });
-  deleteExamFromCloud(examId).catch(() => {});
+  await Promise.allSettled([
+    postSyncMutation('DELETE_EXAM', { id: examId }),
+    deleteExamFromCloud(examId),
+  ]);
 }
 
 export async function serverUpsertQuestion(question: Question): Promise<void> {
-  postSyncMutation('UPSERT_QUESTION', question);
-  saveQuestionToCloud(question).catch(() => {});
+  await Promise.allSettled([
+    postSyncMutation('UPSERT_QUESTION', question),
+    saveQuestionToCloud(question),
+  ]);
 }
 
 export async function serverDeleteQuestion(questionId: string): Promise<void> {
-  postSyncMutation('DELETE_QUESTION', { id: questionId });
-  deleteQuestionFromCloud(questionId).catch(() => {});
+  await Promise.allSettled([
+    postSyncMutation('DELETE_QUESTION', { id: questionId }),
+    deleteQuestionFromCloud(questionId),
+  ]);
 }
 
 export async function serverSubmitResult(result: ExamResult): Promise<void> {
-  postSyncMutation('SUBMIT_RESULT', result);
-  submitExamResultToCloud(result).catch(() => {});
+  await Promise.allSettled([
+    postSyncMutation('SUBMIT_RESULT', result),
+    submitExamResultToCloud(result),
+  ]);
 }
 
 export async function serverDeleteResult(resultId: string): Promise<void> {
-  postSyncMutation('DELETE_RESULT', { id: resultId });
-  deleteExamResultFromCloud(resultId).catch(() => {});
+  await Promise.allSettled([
+    postSyncMutation('DELETE_RESULT', { id: resultId }),
+    deleteExamResultFromCloud(resultId),
+  ]);
 }
 
 export async function serverClearResults(resultIds: string[]): Promise<void> {
-  postSyncMutation('CLEAR_RESULTS', { ids: resultIds });
-  resultIds.forEach((id) => deleteExamResultFromCloud(id).catch(() => {}));
+  await Promise.allSettled([
+    postSyncMutation('CLEAR_RESULTS', { ids: resultIds }),
+    ...resultIds.map((id) => deleteExamResultFromCloud(id)),
+  ]);
 }
 
 export async function serverUpsertUser(user: UserAccount): Promise<void> {
-  postSyncMutation('UPSERT_USER', user);
-  saveUserToCloud(user).catch(() => {});
+  await Promise.allSettled([
+    postSyncMutation('UPSERT_USER', user),
+    saveUserToCloud(user),
+  ]);
 }
 
 export async function serverDeleteUser(userId: string): Promise<void> {
-  postSyncMutation('DELETE_USER', { id: userId });
-  deleteUserFromCloud(userId).catch(() => {});
+  await Promise.allSettled([
+    postSyncMutation('DELETE_USER', { id: userId }),
+    deleteUserFromCloud(userId),
+  ]);
 }
 
 export async function serverUpdatePin(pin: string): Promise<void> {
-  postSyncMutation('UPDATE_PIN', { pin });
-  updateFirebasePin(pin).catch(() => {});
+  await Promise.allSettled([
+    postSyncMutation('UPDATE_PIN', { pin }),
+    updateFirebasePin(pin),
+  ]);
 }
 
 export async function serverFullSync(data: Partial<SyncDataState>): Promise<boolean> {

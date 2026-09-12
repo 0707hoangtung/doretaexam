@@ -32,8 +32,8 @@ export interface SyncDataState {
 
 // In-memory master state
 let state: SyncDataState = {
-  exams: initialExams,
-  questionBank: initialQuestionBank,
+  exams: [],
+  questionBank: [],
   results: [],
   users: [DEFAULT_ROOT_ADMIN],
   systemPin: 'Tunganh7787',
@@ -57,11 +57,11 @@ export function initSyncStore(): void {
       const parsed = JSON.parse(raw);
       if (parsed) {
         state = {
-          exams: Array.isArray(parsed.exams) ? parsed.exams : initialExams,
-          questionBank: Array.isArray(parsed.questionBank) ? parsed.questionBank : initialQuestionBank,
+          exams: Array.isArray(parsed.exams) ? parsed.exams : [],
+          questionBank: Array.isArray(parsed.questionBank) ? parsed.questionBank : [],
           results: Array.isArray(parsed.results) ? parsed.results : [],
           users: Array.isArray(parsed.users) && parsed.users.length > 0 ? parsed.users : [DEFAULT_ROOT_ADMIN],
-          systemPin: typeof parsed.systemPin === 'string' ? parsed.systemPin : '123456',
+          systemPin: typeof parsed.systemPin === 'string' ? parsed.systemPin : 'Tunganh7787',
           lastUpdated: parsed.lastUpdated || new Date().toISOString(),
         };
         console.log(`[SyncStore] Loaded database with ${state.exams.length} exams, ${state.questionBank.length} questions.`);
@@ -227,32 +227,19 @@ export function updatePin(pin: string): SyncDataState {
 
 export function fullSync(incoming: Partial<SyncDataState>): SyncDataState {
   if (Array.isArray(incoming.exams)) {
-    // Smart merge: if client has exams with codes not in state, merge them
-    const examMap = new Map<string, Exam>();
-    state.exams.forEach((e) => examMap.set(e.id, e));
-    incoming.exams.forEach((e) => examMap.set(e.id, e));
-    state.exams = Array.from(examMap.values());
+    state.exams = incoming.exams;
   }
 
   if (Array.isArray(incoming.questionBank)) {
-    const qMap = new Map<string, Question>();
-    state.questionBank.forEach((q) => qMap.set(q.id, q));
-    incoming.questionBank.forEach((q) => qMap.set(q.id, q));
-    state.questionBank = Array.from(qMap.values());
+    state.questionBank = incoming.questionBank;
   }
 
   if (Array.isArray(incoming.results)) {
-    const resMap = new Map<string, ExamResult>();
-    state.results.forEach((r) => resMap.set(r.id, r));
-    incoming.results.forEach((r) => resMap.set(r.id, r));
-    state.results = Array.from(resMap.values());
+    state.results = incoming.results;
   }
 
   if (Array.isArray(incoming.users) && incoming.users.length > 0) {
-    const uMap = new Map<string, UserAccount>();
-    state.users.forEach((u) => uMap.set(u.id, u));
-    incoming.users.forEach((u) => uMap.set(u.id, u));
-    state.users = Array.from(uMap.values());
+    state.users = incoming.users;
   }
 
   if (typeof incoming.systemPin === 'string' && incoming.systemPin.trim().length > 0) {

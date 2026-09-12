@@ -442,6 +442,7 @@ export async function deleteUserFromCloud(userId: string): Promise<boolean> {
 
 /**
  * Manually or automatically trigger full synchronization of all data to Cloud Firestore
+ * Also reconciles and purges any deleted documents from Firestore
  */
 export async function syncAllLocalDataToCloud(
   exams: Exam[],
@@ -454,9 +455,35 @@ export async function syncAllLocalDataToCloud(
   let resultsSynced = 0;
   let usersSynced = 0;
 
+  // 1. Clean up deleted exams from Firestore
+  try {
+    const examSnapshot = await getDocs(collection(db, COLLECTIONS.EXAMS));
+    const currentExamIds = new Set(exams.map((e) => e.id));
+    for (const docSnap of examSnapshot.docs) {
+      if (!currentExamIds.has(docSnap.id)) {
+        await deleteDoc(doc(db, COLLECTIONS.EXAMS, docSnap.id));
+      }
+    }
+  } catch (err) {
+    console.warn('[Firebase] Exam cleanup error:', err);
+  }
+
   for (const ex of exams) {
     const success = await saveExamToCloud(ex);
     if (success) examsSynced++;
+  }
+
+  // 2. Clean up deleted questions from Firestore
+  try {
+    const bankSnapshot = await getDocs(collection(db, COLLECTIONS.QBANK));
+    const currentQIds = new Set(bank.map((q) => q.id));
+    for (const docSnap of bankSnapshot.docs) {
+      if (!currentQIds.has(docSnap.id)) {
+        await deleteDoc(doc(db, COLLECTIONS.QBANK, docSnap.id));
+      }
+    }
+  } catch (err) {
+    console.warn('[Firebase] Question bank cleanup error:', err);
   }
 
   for (const q of bank) {

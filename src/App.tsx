@@ -89,11 +89,11 @@ export default function App() {
 
   // Data States with LocalStorage Cache + Cloud Firestore Sync
   const [questionBank, setQuestionBank] = useState<Question[]>(() => {
-    return getStorageItem<Question[]>(STORAGE_KEYS.QBANK, initialQuestionBank);
+    return getStorageItem<Question[]>(STORAGE_KEYS.QBANK, []);
   });
 
   const [exams, setExams] = useState<Exam[]>(() => {
-    return getStorageItem<Exam[]>(STORAGE_KEYS.EXAMS, initialExams);
+    return getStorageItem<Exam[]>(STORAGE_KEYS.EXAMS, []);
   });
 
   const [results, setResults] = useState<ExamResult[]>(() => {
@@ -175,28 +175,12 @@ export default function App() {
 
   // Real-Time Multi-Device & Cross-Tab Sync Engine (SSE + Cloud Redundancy)
   useEffect(() => {
-    let hasCheckedBootstrap = false;
-
     // 1. Primary Real-Time Synchronization via Server-Sent Events & API
     const unsubServer = startSyncListener({
       onExams: (cloudExams) => {
         if (Array.isArray(cloudExams)) {
           setExams(cloudExams);
           setStorageItem(STORAGE_KEYS.EXAMS, cloudExams);
-
-          // On first receive, check if this device has local exams not on server and push them
-          if (!hasCheckedBootstrap) {
-            hasCheckedBootstrap = true;
-            const local = getStorageItem<Exam[]>(STORAGE_KEYS.EXAMS, []);
-            if (local && local.length > 0) {
-              const serverExamIds = new Set(cloudExams.map((e) => e.id));
-              const missingLocals = local.filter((e) => !serverExamIds.has(e.id));
-              if (missingLocals.length > 0) {
-                console.log(`[SyncEngine] Auto-pushing ${missingLocals.length} local exams to server...`);
-                missingLocals.forEach((ex) => serverUpsertExam(ex));
-              }
-            }
-          }
         }
       },
       onQuestionBank: (cloudBank) => {
@@ -236,28 +220,28 @@ export default function App() {
     });
 
     const unsubExams = subscribeExams((cloudExams) => {
-      if (cloudExams && Array.isArray(cloudExams) && cloudExams.length > 0) {
+      if (Array.isArray(cloudExams)) {
         setExams(cloudExams);
         setStorageItem(STORAGE_KEYS.EXAMS, cloudExams);
       }
     });
 
     const unsubBank = subscribeQuestionBank((cloudBank) => {
-      if (cloudBank && Array.isArray(cloudBank) && cloudBank.length > 0) {
+      if (Array.isArray(cloudBank)) {
         setQuestionBank(cloudBank);
         setStorageItem(STORAGE_KEYS.QBANK, cloudBank);
       }
     });
 
     const unsubResults = subscribeExamResults((cloudResults) => {
-      if (cloudResults && Array.isArray(cloudResults) && cloudResults.length > 0) {
+      if (Array.isArray(cloudResults)) {
         setResults(cloudResults);
         setStorageItem(STORAGE_KEYS.RESULTS, cloudResults);
       }
     });
 
     const unsubUsers = subscribeUsers((cloudUsers) => {
-      if (cloudUsers && Array.isArray(cloudUsers) && cloudUsers.length > 0) {
+      if (Array.isArray(cloudUsers) && cloudUsers.length > 0) {
         setUsers(cloudUsers);
         setStorageItem(STORAGE_KEYS.USERS, cloudUsers);
       }
@@ -599,7 +583,11 @@ export default function App() {
   };
 
   const handleDeleteUserAccount = (userId: string) => {
-    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    setUsers((prev) => {
+      const updated = prev.filter((u) => u.id !== userId);
+      setStorageItem(STORAGE_KEYS.USERS, updated);
+      return updated;
+    });
     serverDeleteUser(userId);
     showToast('Đã xóa tài khoản giáo viên thành công!', 'info');
   };
@@ -793,6 +781,7 @@ export default function App() {
                 const allIds = results.map((r) => r.id);
                 serverClearResults(allIds);
                 setResults([]);
+                setStorageItem(STORAGE_KEYS.RESULTS, []);
               } else if (currentUser) {
                 const myResultIds = results
                   .filter((r) => {
@@ -803,11 +792,19 @@ export default function App() {
                   .map((r) => r.id);
                 serverClearResults(myResultIds);
                 const myIdSet = new Set(myResultIds);
-                setResults((prev) => prev.filter((r) => !myIdSet.has(r.id)));
+                setResults((prev) => {
+                  const updated = prev.filter((r) => !myIdSet.has(r.id));
+                  setStorageItem(STORAGE_KEYS.RESULTS, updated);
+                  return updated;
+                });
               }
             }}
             onDeleteResult={(id) => {
-              setResults((prev) => prev.filter((r) => r.id !== id));
+              setResults((prev) => {
+                const updated = prev.filter((r) => r.id !== id);
+                setStorageItem(STORAGE_KEYS.RESULTS, updated);
+                return updated;
+              });
               serverDeleteResult(id);
             }}
             showToast={showToast}
