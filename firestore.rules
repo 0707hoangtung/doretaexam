@@ -1,0 +1,80 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidDocId(docId) {
+      return docId is string && docId.size() > 0 && docId.size() <= 128;
+    }
+
+    // System Settings (Admin PIN & Global Config)
+    match /system_settings/{docId} {
+      allow read: if true;
+      allow create, update: if isValidDocId(docId) 
+        && request.resource.data.adminPin is string 
+        && request.resource.data.adminPin.size() >= 3 
+        && request.resource.data.adminPin.size() <= 64;
+      allow delete: if false;
+    }
+
+    // Exams (Online exams, question structures, timings)
+    match /exams/{examId} {
+      allow read: if true;
+      allow create, update: if isValidDocId(examId)
+        && request.resource.data.title is string 
+        && request.resource.data.title.size() > 0 
+        && request.resource.data.title.size() <= 500
+        && request.resource.data.code is string
+        && request.resource.data.code.size() > 0 
+        && request.resource.data.code.size() <= 64
+        && request.resource.data.questions is list;
+      allow delete: if isValidDocId(examId);
+    }
+
+    // Question Bank (Shared questions)
+    match /question_bank/{questionId} {
+      allow read: if true;
+      allow create, update: if isValidDocId(questionId)
+        && request.resource.data.id is string
+        && request.resource.data.type in ['mc', 'tf', 'short', 'essay'];
+      allow delete: if isValidDocId(questionId);
+    }
+
+    // Exam Results (Student submissions & grades)
+    match /exam_results/{resultId} {
+      allow read: if true;
+      allow create: if isValidDocId(resultId)
+        && request.resource.data.studentName is string 
+        && request.resource.data.studentName.size() > 0 
+        && request.resource.data.studentName.size() <= 200
+        && request.resource.data.examCode is string 
+        && request.resource.data.score is number 
+        && request.resource.data.score >= 0 
+        && request.resource.data.score <= 10;
+      // Prevent post-submission tampering of student scores
+      allow update: if false;
+      allow delete: if isValidDocId(resultId);
+    }
+
+    // User Accounts & Teacher Access (RBAC)
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update: if isValidDocId(userId)
+        && request.resource.data.username is string 
+        && request.resource.data.username.size() >= 3 
+        && request.resource.data.displayName is string 
+        && request.resource.data.role in ['super_admin', 'teacher'];
+      // Root admin account is permanently protected against deletion
+      allow delete: if isValidDocId(userId) && userId != 'usr-root-admin' && userId != 'user-admin-root';
+    }
+
+    // Media Storage (Audio chunks for English listening exams)
+    match /media_storage/{docId} {
+      allow read: if true;
+      allow create, update: if isValidDocId(docId)
+        && request.resource.data.mediaId is string 
+        && (!('data' in request.resource.data) || request.resource.data.data.size() <= 900000);
+      allow delete: if isValidDocId(docId);
+    }
+  }
+}
+

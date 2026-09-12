@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix DORETA\u0027S EXAM",
+  "description": "Hệ thống quản lý ngân hàng câu hỏi, soạn đề thi và tổ chức phòng thi trực tuyến chuẩn Bộ GD\u0026ĐT.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

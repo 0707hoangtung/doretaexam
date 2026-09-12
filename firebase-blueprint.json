@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DoretaExamFirestoreSchema",
+  "description": "Firestore schema and security blueprint for Doreta's Exam System",
+  "entities": {
+    "system_settings": {
+      "title": "SystemSettings",
+      "description": "Cấu hình hệ thống chung (mã PIN quản trị viên tối cao, cài đặt toàn cục)",
+      "properties": {
+        "adminPin": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["adminPin"]
+    },
+    "exams": {
+      "title": "Exam",
+      "description": "Đề thi chính thức và các mã đề hoán vị đã xuất bản",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "title": { "type": "string" },
+        "duration": { "type": "number" },
+        "shuffleQs": { "type": "boolean" },
+        "shuffleOpts": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "questions": { "type": "array" },
+        "description": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorUsername": { "type": "string" }
+      },
+      "required": ["id", "code", "title", "questions"]
+    },
+    "question_bank": {
+      "title": "QuestionBankItem",
+      "description": "Ngân hàng câu hỏi phân quyền theo giáo viên và chia sẻ chung",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "stem": { "type": "string" },
+        "content": { "type": "string" },
+        "grade": { "type": "string" },
+        "level": { "type": "string" },
+        "topic": { "type": "string" },
+        "options": { "type": "object" },
+        "correctAnswer": { "type": "string" },
+        "statements": { "type": "object" },
+        "correctAnswers": { "type": "object" },
+        "points": { "type": "number" },
+        "guide": { "type": "string" },
+        "audio": { "type": "string" },
+        "audioName": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorUsername": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "type"]
+    },
+    "exam_results": {
+      "title": "ExamResult",
+      "description": "Kết quả nộp bài thi của học sinh với điểm số và phân tích chi tiết",
+      "properties": {
+        "id": { "type": "string" },
+        "examCode": { "type": "string" },
+        "examTitle": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentSbd": { "type": "string" },
+        "studentClass": { "type": "string" },
+        "score": { "type": "number" },
+        "tabSwitchCount": { "type": "number" },
+        "submittedAt": { "type": "string" },
+        "durationSpentSeconds": { "type": "number" },
+        "answers": { "type": "object" },
+        "examAuthorId": { "type": "string" },
+        "examAuthorName": { "type": "string" },
+        "scoreBreakdown": { "type": "object" }
+      },
+      "required": ["id", "examCode", "studentName", "score", "submittedAt"]
+    },
+    "users": {
+      "title": "UserAccount",
+      "description": "Tài khoản giáo viên và quản trị viên hệ thống với vai trò RBAC",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string" },
+        "password": { "type": "string" },
+        "email": { "type": "string" },
+        "subject": { "type": "string" },
+        "school": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "lastLoginAt": { "type": "string" }
+      },
+      "required": ["id", "username", "displayName", "role"]
+    },
+    "media_storage": {
+      "title": "MediaStorage",
+      "description": "Lưu trữ tệp âm thanh theo chunk tối ưu an toàn dung lượng Firestore",
+      "properties": {
+        "mediaId": { "type": "string" },
+        "chunkIndex": { "type": "number" },
+        "totalChunks": { "type": "number" },
+        "totalLength": { "type": "number" },
+        "data": { "type": "string" },
+        "fileName": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["mediaId"]
+    }
+  },
+  "firestore": {
+    "/system_settings/{docId}": {
+      "schema": { "$ref": "#/entities/system_settings" },
+      "description": "Cấu hình hệ thống chung (mã PIN quản trị, cài đặt toàn cục)"
+    },
+    "/exams/{examId}": {
+      "schema": { "$ref": "#/entities/exams" },
+      "description": "Danh sách đề thi trực tuyến (gồm câu hỏi, thời gian, cài đặt xáo trộn)"
+    },
+    "/question_bank/{questionId}": {
+      "schema": { "$ref": "#/entities/question_bank" },
+      "description": "Ngân hàng câu hỏi chia sẻ dùng chung và phân quyền theo giáo viên"
+    },
+    "/exam_results/{resultId}": {
+      "schema": { "$ref": "#/entities/exam_results" },
+      "description": "Kết quả bài làm của thí sinh sau khi nộp bài thi"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/users" },
+      "description": "Tài khoản giáo viên và quản trị viên hệ thống"
+    },
+    "/media_storage/{docId}": {
+      "schema": { "$ref": "#/entities/media_storage" },
+      "description": "Lưu trữ tệp âm thanh nghe tiếng Anh theo chunk chống vượt ngưỡng Firestore 1MB"
+    }
+  }
+}

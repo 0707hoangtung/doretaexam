@@ -1,0 +1,302 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(51, 65, 85, 0.7);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.8);
+}
+
+/* KaTeX formula rendering polish */
+.katex {
+  font-size: 1.08em;
+}
+
+.katex-display {
+  margin: 0.5em 0 !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0;
+}
+
+/* =========================================================================
+   THEME: XANH CHUỐI & XANH LƠ (VIỀN VÀ CHỮ XANH ĐẬM)
+   - Màu nền chủ đạo: pha trộn giữa trắng và xanh lơ
+   - Màu nền các thẻ / khối / ô: màu xanh chuối
+   - Màu viền: màu xanh đậm
+   - Tất cả các chữ màu: màu xanh đậm
+   ========================================================================= */
+
+body.theme-cyan-lime,
+.theme-cyan-lime {
+  background: linear-gradient(135deg, #ffffff 0%, #ecfeff 25%, #e0f2fe 55%, #cffafe 85%, #bae6fd 100%) fixed !important;
+  background-color: #e0f2fe !important;
+  color: #064e3b !important;
+}
+
+/* Selection */
+.theme-cyan-lime ::selection {
+  background: #bef264 !important;
+  color: #064e3b !important;
+}
+
+/* Scrollbars */
+.theme-cyan-lime ::-webkit-scrollbar-track {
+  background: #e0f2fe !important;
+}
+.theme-cyan-lime ::-webkit-scrollbar-thumb {
+  background: #166534 !important;
+  border-radius: 9999px !important;
+}
+.theme-cyan-lime ::-webkit-scrollbar-thumb:hover {
+  background: #14532d !important;
+}
+
+/* Header bar */
+.theme-cyan-lime header {
+  background: rgba(217, 249, 157, 0.96) !important; /* Xanh chuối nền header */
+  border-bottom: 2px solid #14532d !important; /* Viền xanh đậm */
+  box-shadow: 0 4px 14px rgba(20, 83, 45, 0.12) !important;
+}
+
+/* Navigation containers */
+.theme-cyan-lime nav {
+  background-color: #ecfccb !important;
+  border: 1.5px solid #14532d !important;
+}
+
+/* Cards, containers, modals, panels, dropdowns */
+.theme-cyan-lime .bg-slate-900,
+.theme-cyan-lime .bg-slate-900\/90,
+.theme-cyan-lime .bg-slate-900\/95,
+.theme-cyan-lime .bg-slate-900\/80,
+.theme-cyan-lime .bg-slate-900\/70,
+.theme-cyan-lime .bg-slate-900\/50,
+.theme-cyan-lime .bg-slate-900\/40,
+.theme-cyan-lime .bg-slate-950\/70,
+.theme-cyan-lime .bg-slate-950\/80,
+.theme-cyan-lime .bg-slate-950\/90,
+.theme-cyan-lime .bg-slate-800,
+.theme-cyan-lime .bg-slate-800\/60,
+.theme-cyan-lime .bg-slate-800\/70,
+.theme-cyan-lime .bg-slate-800\/80,
+.theme-cyan-lime .bg-slate-800\/90,
+.theme-cyan-lime .bg-slate-850,
+.theme-cyan-lime .bg-slate-700,
+.theme-cyan-lime .bg-indigo-950,
+.theme-cyan-lime .bg-indigo-950\/60,
+.theme-cyan-lime .bg-amber-950\/50,
+.theme-cyan-lime .bg-emerald-950\/50,
+.theme-cyan-lime .bg-emerald-950\/30,
+.theme-cyan-lime .bg-rose-950\/30 {
+  background-color: #ecfccb !important; /* Xanh chuối nền thẻ/khối */
+}
+
+/* Sub-boxes, items, choices, stats boxes */
+.theme-cyan-lime .bg-slate-950 {
+  background-color: #f7fee7 !important; /* Xanh chuối sáng cho khối con */
+}
+
+/* All borders */
+.theme-cyan-lime .border,
+.theme-cyan-lime [class*="border-slate-"],
+.theme-cyan-lime [class*="border-indigo-"],
+.theme-cyan-lime [class*="border-emerald-"],
+.theme-cyan-lime [class*="border-amber-"],
+.theme-cyan-lime [class*="border-rose-"],
+.theme-cyan-lime [class*="border-purple-"],
+.theme-cyan-lime hr {
+  border-color: #14532d !important; /* Viền xanh đậm */
+}
+
+/* All text colors */
+.theme-cyan-lime,
+.theme-cyan-lime h1,
+.theme-cyan-lime h2,
+.theme-cyan-lime h3,
+.theme-cyan-lime h4,
+.theme-cyan-lime h5,
+.theme-cyan-lime h6,
+.theme-cyan-lime p,
+.theme-cyan-lime span,
+.theme-cyan-lime label,
+.theme-cyan-lime div,
+.theme-cyan-lime button,
+.theme-cyan-lime a,
+.theme-cyan-lime td,
+.theme-cyan-lime th,
+.theme-cyan-lime li,
+.theme-cyan-lime strong,
+.theme-cyan-lime b,
+.theme-cyan-lime i,
+.theme-cyan-lime em,
+.theme-cyan-lime [class*="text-slate-"],
+.theme-cyan-lime [class*="text-white"],
+.theme-cyan-lime [class*="text-indigo-"],
+.theme-cyan-lime [class*="text-emerald-"],
+.theme-cyan-lime [class*="text-amber-"],
+.theme-cyan-lime [class*="text-rose-"],
+.theme-cyan-lime [class*="text-purple-"],
+.theme-cyan-lime [class*="text-blue-"],
+.theme-cyan-lime [class*="text-zinc-"],
+.theme-cyan-lime [class*="text-gray-"] {
+  color: #064e3b !important; /* Tất cả các chữ màu đều có màu xanh đậm */
+}
+
+/* All icons (Lucide SVG) */
+.theme-cyan-lime svg {
+  color: #064e3b !important;
+  stroke: #064e3b !important;
+}
+
+/* KaTeX formulas */
+.theme-cyan-lime .katex,
+.theme-cyan-lime .katex * {
+  color: #064e3b !important;
+  border-color: #14532d !important;
+}
+
+/* Inputs, textareas, selects */
+.theme-cyan-lime input,
+.theme-cyan-lime textarea,
+.theme-cyan-lime select {
+  background-color: #f7fee7 !important;
+  border: 1.5px solid #14532d !important;
+  color: #064e3b !important;
+}
+.theme-cyan-lime input:focus,
+.theme-cyan-lime textarea:focus,
+.theme-cyan-lime select:focus {
+  border-color: #064e3b !important;
+  outline: 2px solid #a3e635 !important;
+  background-color: #ffffff !important;
+}
+.theme-cyan-lime input::placeholder,
+.theme-cyan-lime textarea::placeholder {
+  color: #166534 !important;
+  opacity: 0.7 !important;
+}
+
+/* Primary & Action Buttons, Active Tabs */
+.theme-cyan-lime .bg-indigo-600,
+.theme-cyan-lime .bg-indigo-500,
+.theme-cyan-lime .bg-emerald-600,
+.theme-cyan-lime .bg-emerald-500,
+.theme-cyan-lime .bg-indigo-700,
+.theme-cyan-lime button.bg-indigo-600,
+.theme-cyan-lime button.bg-emerald-600 {
+  background-color: #bef264 !important; /* Xanh chuối tươi */
+  color: #064e3b !important; /* Chữ xanh đậm */
+  border: 1.5px solid #14532d !important; /* Viền xanh đậm */
+  font-weight: 800 !important;
+}
+.theme-cyan-lime .bg-indigo-600:hover,
+.theme-cyan-lime .bg-indigo-500:hover,
+.theme-cyan-lime .bg-emerald-600:hover,
+.theme-cyan-lime .bg-emerald-500:hover,
+.theme-cyan-lime button.bg-indigo-600:hover,
+.theme-cyan-lime button.bg-emerald-600:hover {
+  background-color: #a3e635 !important;
+}
+
+/* Secondary & Inactive Buttons */
+.theme-cyan-lime button.bg-slate-800,
+.theme-cyan-lime button.bg-slate-900 {
+  background-color: #d9f99d !important;
+  color: #064e3b !important;
+  border: 1px solid #14532d !important;
+}
+.theme-cyan-lime button.bg-slate-800:hover,
+.theme-cyan-lime button.bg-slate-900:hover {
+  background-color: #bef264 !important;
+}
+
+/* Tables */
+.theme-cyan-lime table {
+  border: 1.5px solid #14532d !important;
+}
+.theme-cyan-lime th {
+  background-color: #bef264 !important;
+  color: #064e3b !important;
+  border: 1.5px solid #14532d !important;
+}
+.theme-cyan-lime td {
+  background-color: #f7fee7 !important;
+  color: #064e3b !important;
+  border: 1px solid #166534 !important;
+}
+.theme-cyan-lime tr:hover td {
+  background-color: #ecfccb !important;
+}
+
+/* Modal Backdrops and Dialogs */
+.theme-cyan-lime .fixed.inset-0.z-50,
+.theme-cyan-lime .fixed.inset-0.z-40 {
+  background-color: rgba(6, 78, 59, 0.4) !important;
+  backdrop-filter: blur(6px) !important;
+}
+.theme-cyan-lime .fixed.inset-0 [class*="max-w-"] {
+  background-color: #ecfccb !important;
+  border: 2px solid #14532d !important;
+  box-shadow: 0 20px 45px rgba(20, 83, 45, 0.25) !important;
+}
+
+/* Reset gradient text */
+.theme-cyan-lime .bg-clip-text,
+.theme-cyan-lime .text-transparent {
+  -webkit-text-fill-color: #064e3b !important;
+  background: none !important;
+  color: #064e3b !important;
+}
+
+/* Brand logo box */
+.theme-cyan-lime .bg-gradient-to-tr {
+  background: #bef264 !important;
+  color: #064e3b !important;
+  border: 2px solid #14532d !important;
+}
+
+/* Form controls */
+.theme-cyan-lime input[type="radio"],
+.theme-cyan-lime input[type="checkbox"] {
+  accent-color: #15803d !important;
+}
+
+/* Interactive option labels & hover */
+.theme-cyan-lime label.cursor-pointer:hover {
+  background-color: #bef264 !important;
+}
+
+/* Badges and tags */
+.theme-cyan-lime .bg-indigo-500\/20,
+.theme-cyan-lime .bg-emerald-500\/20,
+.theme-cyan-lime .bg-amber-500\/20,
+.theme-cyan-lime .bg-rose-500\/20 {
+  background-color: #d9f99d !important;
+  border-color: #14532d !important;
+}
+
+/* Question Palette & Exam Progress */
+.theme-cyan-lime button.font-mono {
+  border: 1px solid #14532d !important;
+}
+
+
