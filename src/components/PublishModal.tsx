@@ -11,6 +11,9 @@ import {
   Printer,
   CheckCircle2,
   ListOrdered,
+  Calendar,
+  CalendarCheck,
+  AlertCircle,
 } from 'lucide-react';
 import { Question } from '../types';
 import { generateExamVariants } from '../utils/examStructure';
@@ -26,6 +29,8 @@ export interface PublishConfirmData {
   variantCount: number;
   variantCodes: string[];
   keepMasterAsFirst: boolean;
+  startTime?: string | null;
+  endTime?: string | null;
 }
 
 interface PublishModalProps {
@@ -52,6 +57,9 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   const [shuffleQs, setShuffleQs] = useState(true);
   const [shuffleOpts, setShuffleOpts] = useState(true);
   const [description, setDescription] = useState('');
+  const [hasTimeSchedule, setHasTimeSchedule] = useState(false);
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -70,10 +78,26 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       setShuffleQs(true);
       setShuffleOpts(true);
       setDescription('');
+      setHasTimeSchedule(false);
+      setStartTime('');
+      setEndTime('');
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  // Helper to format Date to input datetime-local string (YYYY-MM-DDTHH:mm)
+  const toLocalIso = (d: Date) => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const isTimeInvalid = Boolean(
+    hasTimeSchedule &&
+    startTime &&
+    endTime &&
+    new Date(endTime).getTime() <= new Date(startTime).getTime()
+  );
 
   const handleApplyPreset = (type: '100' | '200' | '300' | 'letter' | 'custom_ex') => {
     if (type === '100') {
@@ -133,12 +157,18 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       variantCount,
       variantCodes: activeCodes,
       keepMasterAsFirst,
+      startTime: hasTimeSchedule && startTime ? startTime : null,
+      endTime: hasTimeSchedule && endTime ? endTime : null,
     };
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
+    if (isTimeInvalid) {
+      alert('Thời gian đóng đề thi phải sau thời gian bắt đầu mở đề!');
+      return;
+    }
     onConfirm(getPayload());
   };
 
@@ -159,6 +189,8 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       shuffleOpts: payload.shuffleOpts,
       variantCodes: payload.variantCodes,
       keepMasterAsFirst: payload.keepMasterAsFirst,
+      startTime: payload.startTime,
+      endTime: payload.endTime,
     });
     exportMultiVariantExamToWord(variants, { includeAnswers: true });
   };
@@ -180,6 +212,8 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       shuffleOpts: payload.shuffleOpts,
       variantCodes: payload.variantCodes,
       keepMasterAsFirst: payload.keepMasterAsFirst,
+      startTime: payload.startTime,
+      endTime: payload.endTime,
     });
     exportMultiVariantExamToPDF(variants);
   };
@@ -402,6 +436,139 @@ export const PublishModal: React.FC<PublishModalProps> = ({
               placeholder="VD: Không sử dụng tài liệu, máy tính cầm tay được phép mang vào phòng thi..."
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-indigo-500 font-medium"
             />
+          </div>
+
+          {/* CÀI ĐẶT THỜI GIAN MỞ & ĐÓNG ĐỀ THI (KIỂM SOÁT THỜI GIAN LÀM BÀI) */}
+          <div className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer select-none text-slate-200 font-bold">
+                <input
+                  type="checkbox"
+                  checked={hasTimeSchedule}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setHasTimeSchedule(checked);
+                    if (checked && !startTime) {
+                      const now = new Date();
+                      setStartTime(toLocalIso(now));
+                      const end = new Date(now.getTime() + (Number(duration) || 45) * 60 * 1000 + 60 * 60 * 1000);
+                      setEndTime(toLocalIso(end));
+                    }
+                  }}
+                  className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0"
+                />
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-indigo-400" />
+                  <span className="text-xs">Cài Đặt Khung Giờ Mở & Đóng Đề Thi</span>
+                </div>
+              </label>
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition-colors ${
+                  hasTimeSchedule
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                    : 'bg-slate-900 text-slate-400 border-slate-800'
+                }`}
+              >
+                {hasTimeSchedule ? 'Có Giới Hạn Giờ' : 'Mở Tự Do'}
+              </span>
+            </div>
+
+            {hasTimeSchedule ? (
+              <div className="space-y-3 pt-1 border-t border-slate-800/60 animate-in fade-in duration-200">
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Kiểm soát giờ thi: Học sinh chỉ được phép vào thi từ <strong className="text-emerald-300 font-medium">giờ bắt đầu mở</strong> đến <strong className="text-rose-300 font-medium">giờ đóng hoàn toàn</strong>.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Thời gian bắt đầu mở đề thi */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] text-slate-300 font-bold flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Giờ Mở Đề Thi:</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setStartTime(toLocalIso(new Date()))}
+                        className="text-[10px] text-emerald-400 hover:underline font-semibold"
+                      >
+                        Mở ngay
+                      </button>
+                    </div>
+                    <input
+                      type="datetime-local"
+                      required={hasTimeSchedule}
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-2 text-white font-mono text-xs focus:outline-none focus:border-indigo-500 font-semibold"
+                    />
+                  </div>
+
+                  {/* Thời gian đóng đề thi hoàn toàn */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] text-slate-300 font-bold flex items-center gap-1">
+                        <CalendarCheck className="w-3.5 h-3.5 text-rose-400" />
+                        <span>Giờ Đóng Đề Thi:</span>
+                      </label>
+                      <div className="flex gap-1.5 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const base = startTime ? new Date(startTime) : new Date();
+                            const d = new Date(base.getTime() + (Number(duration) || 45) * 60 * 1000);
+                            setEndTime(toLocalIso(d));
+                          }}
+                          className="text-rose-400 hover:underline font-semibold"
+                        >
+                          +{duration}p
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const base = startTime ? new Date(startTime) : new Date();
+                            const d = new Date(base.getTime() + 2 * 3600 * 1000);
+                            setEndTime(toLocalIso(d));
+                          }}
+                          className="text-rose-400 hover:underline font-semibold"
+                        >
+                          +2h
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const base = startTime ? new Date(startTime) : new Date();
+                            const d = new Date(base.getTime() + 24 * 3600 * 1000);
+                            setEndTime(toLocalIso(d));
+                          }}
+                          className="text-rose-400 hover:underline font-semibold"
+                        >
+                          +1 ngày
+                        </button>
+                      </div>
+                    </div>
+                    <input
+                      type="datetime-local"
+                      required={hasTimeSchedule}
+                      value={endTime}
+                      onChange={(e) => setEndTime(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-2 text-white font-mono text-xs focus:outline-none focus:border-indigo-500 font-semibold"
+                    />
+                  </div>
+                </div>
+
+                {isTimeInvalid && (
+                  <div className="bg-rose-950/40 border border-rose-800/60 rounded-xl p-2.5 text-[11px] text-rose-300 flex items-center gap-2 font-medium">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>Thời gian đóng đề thi phải diễn ra sau thời gian bắt đầu mở đề!</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-[11px] text-slate-500 italic">
+                Đang để mặc định (Mở tự do, học sinh có thể nhập mã và làm bài bất kỳ lúc nào).
+              </p>
+            )}
           </div>
 
           {/* Cấu hình xáo trộn đề */}

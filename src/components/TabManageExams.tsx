@@ -25,7 +25,11 @@ import {
   Lock,
   Sparkles,
   CloudUpload,
+  Calendar,
+  CalendarCheck,
+  AlertCircle,
 } from 'lucide-react';
+import { getExamTimeStatus } from '../utils/examTiming';
 
 interface TabManageExamsProps {
   exams: Exam[];
@@ -379,6 +383,56 @@ export const TabManageExams: React.FC<TabManageExamsProps> = ({
                       </>
                     )}
                   </div>
+
+                  {/* KHUNG GIỜ MỞ / ĐÓNG ĐỀ THI */}
+                  {(() => {
+                    const timing = getExamTimeStatus(ex);
+                    if (!timing.isRestricted) {
+                      return (
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium pt-0.5">
+                          <Calendar className="w-3 h-3 text-slate-500" />
+                          <span>Mở tự do (Không giới hạn khung giờ)</span>
+                        </div>
+                      );
+                    }
+                    if (timing.status === 'upcoming') {
+                      return (
+                        <div className="bg-amber-950/40 border border-amber-800/60 text-amber-300 rounded-xl px-2.5 py-1.5 text-[11px] font-semibold flex items-center justify-between gap-2">
+                          <span className="flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            <span>Chưa mở</span>
+                          </span>
+                          <span className="text-amber-200/90 font-mono text-[10px]">
+                            Mở lúc: {timing.startFormatted}
+                          </span>
+                        </div>
+                      );
+                    }
+                    if (timing.status === 'closed') {
+                      return (
+                        <div className="bg-rose-950/40 border border-rose-800/60 text-rose-300 rounded-xl px-2.5 py-1.5 text-[11px] font-semibold flex items-center justify-between gap-2">
+                          <span className="flex items-center gap-1.5">
+                            <CalendarCheck className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                            <span>Đã đóng đề</span>
+                          </span>
+                          <span className="text-rose-200/90 font-mono text-[10px]">
+                            Đóng lúc: {timing.endFormatted}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 rounded-xl px-2.5 py-1.5 text-[11px] font-semibold flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                          <span>Đang mở thi</span>
+                        </span>
+                        <span className="text-emerald-200/90 font-mono text-[10px]">
+                          {timing.endFormatted ? `Đóng: ${timing.endFormatted}` : 'Không hạn chế'}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="space-y-2.5 pt-2 border-t border-slate-800/80">

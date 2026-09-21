@@ -193,6 +193,8 @@ export interface ExamVariantConfig {
   authorId?: string;
   authorName?: string;
   authorUsername?: string;
+  startTime?: string | null;
+  endTime?: string | null;
 }
 
 /**
@@ -249,6 +251,8 @@ export function generateExamVariants(
       authorId: config.authorId || 'admin',
       authorName: config.authorName || 'Quản trị viên',
       authorUsername: config.authorUsername || 'admin',
+      startTime: config.startTime || null,
+      endTime: config.endTime || null,
       questions: stampedQuestions,
     };
 

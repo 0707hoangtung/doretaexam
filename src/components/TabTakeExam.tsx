@@ -30,7 +30,10 @@ import {
   ShieldAlert,
   IdCard,
   Volume2,
+  Calendar,
+  CalendarCheck,
 } from 'lucide-react';
+import { getExamTimeStatus, formatCountdown, formatExamDateTime } from '../utils/examTiming';
 
 interface TabTakeExamProps {
   exams: Exam[];
@@ -47,6 +50,15 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
   presetExamCode,
   onClearPresetCode,
 }) => {
+  // Real-time ticking clock for live countdown and schedule status updates
+  const [currentNow, setCurrentNow] = useState<number>(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentNow(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Entry states
   const [examCode, setExamCode] = useState('');
   const [studentName, setStudentName] = useState('');
@@ -190,6 +202,17 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
     if (!activeExam || secondsLeft <= 0) return;
 
     timerRef.current = setInterval(() => {
+      // Check if closing time is reached during active exam
+      if (activeExam.endTime) {
+        const endMs = new Date(activeExam.endTime).getTime();
+        if (!isNaN(endMs) && Date.now() >= endMs) {
+          clearInterval(timerRef.current);
+          showToast('Đã đến giờ đóng đề thi hoàn toàn! Hệ thống tự động thu bài.', 'warning');
+          performSubmit();
+          return;
+        }
+      }
+
       setSecondsLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timerRef.current);
@@ -223,6 +246,17 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
       return;
     }
 
+    // Check Exam Timing Constraints (Giờ mở và đóng đề thi)
+    const timing = getExamTimeStatus(found, Date.now());
+    if (timing.status === 'upcoming') {
+      showToast(`Đề thi chưa đến giờ mở! Kỳ thi sẽ mở lúc ${timing.startFormatted}.`, 'warning');
+      return;
+    }
+    if (timing.status === 'closed') {
+      showToast(`Đề thi đã đóng hoàn toàn lúc ${timing.endFormatted}! Bạn không thể tham gia làm bài thi này.`, 'error');
+      return;
+    }
+
     if (!found.questions || found.questions.length === 0) {
       showToast('Đề thi này hiện chưa có câu hỏi nào!', 'error');
       return;
@@ -235,11 +269,17 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
       !!found.shuffleOpts
     );
 
+    // Calculate maximum allowed duration (if exam closing time is sooner than standard duration)
+    const normalDurationSeconds = (found.duration || 45) * 60;
+    const effectiveSeconds = timing.timeUntilEndMs !== Infinity
+      ? Math.max(30, Math.min(normalDurationSeconds, Math.floor(timing.timeUntilEndMs / 1000)))
+      : normalDurationSeconds;
+
     setActiveExam(found);
     setActiveQuestions(preparedQs);
     setActiveAnswers({});
     setTabSwitchCount(0);
-    setSecondsLeft((found.duration || 45) * 60);
+    setSecondsLeft(effectiveSeconds);
     setExamStartTime(Date.now());
     setCompletedResult(null);
 
@@ -618,6 +658,11 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
                 >
                   {formatTime(secondsLeft)}
                 </span>
+                {activeExam.endTime && (
+                  <span className="text-[10px] text-amber-300 font-semibold block leading-tight">
+                    Đóng đề: {formatExamDateTime(activeExam.endTime)}
+                  </span>
+                )}
               </div>
 
               <button
@@ -1156,6 +1201,12 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
     );
   }
 
+  // Matched exam from current input code
+  const matchedExam = exams.find((ex) => ex.code.toUpperCase() === examCode.trim().toUpperCase());
+  const matchedTiming = matchedExam ? getExamTimeStatus(matchedExam, currentNow) : null;
+  const isUpcoming = matchedTiming?.status === 'upcoming';
+  const isClosed = matchedTiming?.status === 'closed';
+
   // Exam Entry Section (Default View)
   return (
     <div className="max-w-xl mx-auto space-y-6">
@@ -1186,6 +1237,95 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
               className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3.5 text-sm text-white font-mono font-bold focus:outline-none focus:border-indigo-500 uppercase tracking-wider"
             />
           </div>
+
+          {/* HIỂN THỊ TRẠNG THÁI KHUNG GIỜ KHI TÌM THẤY ĐỀ THI */}
+          {matchedExam && matchedTiming && (
+            <div className="animate-in fade-in duration-200">
+              {isUpcoming && (
+                <div className="bg-amber-950/40 border border-amber-800/80 rounded-2xl p-4 text-left space-y-2.5 text-amber-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-black text-xs text-amber-300">
+                      <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>ĐỀ THI CHƯA ĐẾN GIỜ MỞ</span>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold bg-amber-900/60 text-amber-300 border border-amber-700/60 px-2 py-0.5 rounded-lg">
+                      {matchedExam.code}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-amber-200/90 font-medium">
+                    Đề thi <strong>"{matchedExam.title}"</strong> ({matchedExam.duration} phút) đã được hẹn giờ:
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono">
+                    <div className="bg-slate-950/70 p-2.5 rounded-xl border border-amber-900/50">
+                      <span className="text-slate-400 block text-[10px] font-sans">Thời gian mở đề:</span>
+                      <strong className="text-emerald-300">{matchedTiming.startFormatted}</strong>
+                    </div>
+                    <div className="bg-slate-950/70 p-2.5 rounded-xl border border-amber-900/50">
+                      <span className="text-slate-400 block text-[10px] font-sans">Thời gian đóng đề:</span>
+                      <strong className="text-rose-300">{matchedTiming.endFormatted || 'Không giới hạn'}</strong>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-900/40 border border-amber-600/50 rounded-xl p-3 text-center space-y-0.5">
+                    <span className="text-[11px] text-amber-300 block font-semibold">Đề thi sẽ tự động mở sau:</span>
+                    <span className="text-lg font-black font-mono text-amber-200 tracking-wider block">
+                      ⏳ {formatCountdown(matchedTiming.timeUntilStartMs)}
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-amber-300/80 italic text-center">
+                    Học sinh vui lòng chờ đến giờ mở bài thi. Nút bắt đầu sẽ tự động mở khi đến giờ.
+                  </p>
+                </div>
+              )}
+
+              {isClosed && (
+                <div className="bg-rose-950/40 border border-rose-800/80 rounded-2xl p-4 text-left space-y-2 text-rose-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-black text-xs text-rose-300">
+                      <CalendarCheck className="w-4 h-4 text-rose-400 shrink-0" />
+                      <span>ĐỀ THI ĐÃ ĐÓNG HOÀN TOÀN</span>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold bg-rose-900/60 text-rose-300 border border-rose-700/60 px-2 py-0.5 rounded-lg">
+                      {matchedExam.code}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-rose-200/90 font-medium">
+                    Kỳ thi <strong>"{matchedExam.title}"</strong> đã chính thức kết thúc vào lúc{' '}
+                    <strong className="text-white font-mono">{matchedTiming.endFormatted}</strong>.
+                  </p>
+
+                  <p className="text-[11px] text-rose-300/80 italic">
+                    Học sinh không thể tham gia làm bài hoặc nộp bài thi cho đề này nữa.
+                  </p>
+                </div>
+              )}
+
+              {!isUpcoming && !isClosed && matchedTiming.isRestricted && (
+                <div className="bg-emerald-950/30 border border-emerald-800/60 rounded-2xl p-3 text-left space-y-1 text-emerald-200">
+                  <div className="flex items-center justify-between text-xs font-bold text-emerald-300">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>Đang Trong Khung Giờ Mở Thi</span>
+                    </span>
+                    {matchedTiming.endFormatted && (
+                      <span className="text-[11px] font-mono text-emerald-300">
+                        Hạn chót đóng đề: {matchedTiming.endFormatted}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-emerald-300/80">
+                    {matchedTiming.endFormatted
+                      ? `Kỳ thi còn mở trong: ${formatCountdown(matchedTiming.timeUntilEndMs)}. Học sinh hãy làm bài và nộp bài trước khi đề đóng!`
+                      : 'Đề thi đang mở cho học sinh làm bài.'}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
@@ -1231,13 +1371,34 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
             />
           </div>
 
-          <button
-            type="submit"
-            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl text-sm transition-all shadow-lg shadow-indigo-600/30 uppercase tracking-wider flex items-center justify-center gap-2 mt-2"
-          >
-            <span>BẮT ĐẦU LÀM BÀI</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
+          {/* NÚT BẮT ĐẦU LÀM BÀI / THÔNG BÁO CHỜ GIỜ MỞ HOẶC ĐÃ ĐÓNG */}
+          {isUpcoming ? (
+            <button
+              type="button"
+              disabled
+              className="w-full bg-slate-800/80 border border-amber-800/50 text-amber-300 font-bold py-4 rounded-2xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 mt-2 cursor-not-allowed opacity-90"
+            >
+              <Clock className="w-4 h-4 text-amber-400" />
+              <span>Chờ Mở Đề ({formatCountdown(matchedTiming.timeUntilStartMs)})</span>
+            </button>
+          ) : isClosed ? (
+            <button
+              type="button"
+              disabled
+              className="w-full bg-slate-800/80 border border-rose-800/50 text-rose-400 font-bold py-4 rounded-2xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 mt-2 cursor-not-allowed opacity-90"
+            >
+              <CalendarCheck className="w-4 h-4 text-rose-400" />
+              <span>Đề Thi Đã Đóng Hoàn Toàn</span>
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl text-sm transition-all shadow-lg shadow-indigo-600/30 uppercase tracking-wider flex items-center justify-center gap-2 mt-2"
+            >
+              <span>BẮT ĐẦU LÀM BÀI</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          )}
         </form>
       </div>
 
@@ -1250,27 +1411,47 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {exams.map((ex) => (
-              <button
-                key={ex.id}
-                type="button"
-                onClick={() => {
-                  setExamCode(ex.code);
-                  if (!studentName) setStudentName('Học Sinh Thử Nghiệm');
-                }}
-                className="text-left p-3 rounded-2xl bg-slate-950 border border-slate-800 hover:border-indigo-500/60 transition-all space-y-1 group"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs font-black text-indigo-400 bg-indigo-950/60 px-2 py-0.5 rounded-lg border border-indigo-500/30">
-                    {ex.code}
-                  </span>
-                  <span className="text-[11px] text-slate-400 font-semibold">{ex.duration} phút</span>
-                </div>
-                <p className="text-xs font-bold text-white line-clamp-1 group-hover:text-indigo-200">
-                  {ex.title}
-                </p>
-              </button>
-            ))}
+            {exams.map((ex) => {
+              const timing = getExamTimeStatus(ex, currentNow);
+              return (
+                <button
+                  key={ex.id}
+                  type="button"
+                  onClick={() => {
+                    setExamCode(ex.code);
+                    if (!studentName) setStudentName('Học Sinh Thử Nghiệm');
+                  }}
+                  className="text-left p-3 rounded-2xl bg-slate-950 border border-slate-800 hover:border-indigo-500/60 transition-all space-y-1 group"
+                >
+                  <div className="flex items-center justify-between gap-1.5">
+                    <span className="font-mono text-xs font-black text-indigo-400 bg-indigo-950/60 px-2 py-0.5 rounded-lg border border-indigo-500/30">
+                      {ex.code}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {timing.status === 'upcoming' && (
+                        <span className="text-[10px] font-bold text-amber-300 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/60">
+                          Chưa mở
+                        </span>
+                      )}
+                      {timing.status === 'closed' && (
+                        <span className="text-[10px] font-bold text-rose-300 bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-800/60">
+                          Đã đóng
+                        </span>
+                      )}
+                      {timing.status === 'open' && timing.isRestricted && (
+                        <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/60">
+                          Đang mở
+                        </span>
+                      )}
+                      <span className="text-[11px] text-slate-400 font-semibold">{ex.duration} phút</span>
+                    </div>
+                  </div>
+                  <p className="text-xs font-bold text-white line-clamp-1 group-hover:text-indigo-200">
+                    {ex.title}
+                  </p>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

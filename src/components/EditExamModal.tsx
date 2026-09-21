@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Exam } from '../types';
 import { exportExamToWord, exportExamToPDF } from '../utils/examExporter';
-import { Edit3, X, Clock, FileText, FileType, Printer } from 'lucide-react';
+import { Edit3, X, Clock, FileText, FileType, Printer, Calendar, CalendarCheck, AlertCircle } from 'lucide-react';
 
 interface EditExamModalProps {
   exam: Exam | null;
@@ -21,6 +21,14 @@ export const EditExamModal: React.FC<EditExamModalProps> = ({
   const [shuffleQs, setShuffleQs] = useState(false);
   const [shuffleOpts, setShuffleOpts] = useState(false);
   const [description, setDescription] = useState('');
+  const [hasTimeSchedule, setHasTimeSchedule] = useState(false);
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+
+  const toLocalIso = (d: Date) => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
 
   useEffect(() => {
     if (exam) {
@@ -29,14 +37,29 @@ export const EditExamModal: React.FC<EditExamModalProps> = ({
       setShuffleQs(!!exam.shuffleQs);
       setShuffleOpts(!!exam.shuffleOpts);
       setDescription(exam.description || '');
+      const hasSched = Boolean(exam.startTime || exam.endTime);
+      setHasTimeSchedule(hasSched);
+      setStartTime(exam.startTime || '');
+      setEndTime(exam.endTime || '');
     }
   }, [exam]);
 
   if (!isOpen || !exam) return null;
 
+  const isTimeInvalid = Boolean(
+    hasTimeSchedule &&
+    startTime &&
+    endTime &&
+    new Date(endTime).getTime() <= new Date(startTime).getTime()
+  );
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
+    if (isTimeInvalid) {
+      alert('Thời gian đóng đề thi phải sau thời gian bắt đầu mở đề!');
+      return;
+    }
 
     onSave({
       title: title.trim(),
@@ -44,6 +67,8 @@ export const EditExamModal: React.FC<EditExamModalProps> = ({
       shuffleQs,
       shuffleOpts,
       description: description.trim(),
+      startTime: hasTimeSchedule && startTime ? startTime : null,
+      endTime: hasTimeSchedule && endTime ? endTime : null,
     });
   };
 
@@ -117,6 +142,79 @@ export const EditExamModal: React.FC<EditExamModalProps> = ({
               onChange={(e) => setDescription(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-amber-500 font-medium"
             />
+          </div>
+
+          {/* Cài đặt khung giờ thi */}
+          <div className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer select-none text-slate-200 font-bold">
+                <input
+                  type="checkbox"
+                  checked={hasTimeSchedule}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setHasTimeSchedule(checked);
+                    if (checked && !startTime) {
+                      const now = new Date();
+                      setStartTime(toLocalIso(now));
+                      const end = new Date(now.getTime() + (Number(duration) || 45) * 60 * 1000 + 60 * 60 * 1000);
+                      setEndTime(toLocalIso(end));
+                    }
+                  }}
+                  className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-amber-600 focus:ring-0"
+                />
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-amber-400" />
+                  <span className="text-xs">Khung Giờ Mở & Đóng Bài Thi</span>
+                </div>
+              </label>
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition-colors ${
+                  hasTimeSchedule
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                    : 'bg-slate-900 text-slate-400 border-slate-800'
+                }`}
+              >
+                {hasTimeSchedule ? 'Có Giới Hạn Giờ' : 'Mở Tự Do'}
+              </span>
+            </div>
+
+            {hasTimeSchedule && (
+              <div className="space-y-3 pt-1 border-t border-slate-800/60 animate-in fade-in duration-150">
+                <div className="space-y-1">
+                  <label className="text-[11px] text-slate-300 font-bold flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Giờ Bắt Đầu Mở Đề:</span>
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-2 text-white font-mono text-xs focus:outline-none focus:border-amber-500 font-semibold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] text-slate-300 font-bold flex items-center gap-1">
+                    <CalendarCheck className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Giờ Đóng Đề Hoàn Toàn:</span>
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-2 text-white font-mono text-xs focus:outline-none focus:border-amber-500 font-semibold"
+                  />
+                </div>
+
+                {isTimeInvalid && (
+                  <div className="bg-rose-950/40 border border-rose-800/60 rounded-xl p-2.5 text-[11px] text-rose-300 flex items-center gap-2 font-medium">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>Giờ đóng đề thi phải diễn ra sau giờ bắt đầu mở đề!</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="space-y-2 pt-1 bg-slate-950/60 p-3 rounded-2xl border border-slate-800/80">

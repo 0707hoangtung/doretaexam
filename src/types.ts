@@ -55,6 +55,8 @@ export interface Exam {
   authorId?: string; // ID tài khoản giáo viên tạo đề
   authorName?: string; // Tên hiển thị giáo viên tạo đề
   authorUsername?: string;
+  startTime?: string | null; // Thời gian bắt đầu mở đề thi (YYYY-MM-DDTHH:mm hoặc ISO)
+  endTime?: string | null; // Thời gian đóng đề thi hoàn toàn (YYYY-MM-DDTHH:mm hoặc ISO)
 }
 
 export interface ExamResult {
