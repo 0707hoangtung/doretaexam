@@ -659,37 +659,58 @@ export default function App() {
     reader.onload = (e) => {
       try {
         const data = JSON.parse(e.target?.result as string);
-        if (data.bank && Array.isArray(data.bank)) {
-          setQuestionBank(data.bank);
-          data.bank.forEach((q: Question) => serverUpsertQuestion(q));
-        }
-        if (data.exams && Array.isArray(data.exams)) {
-          setExams(data.exams);
-          data.exams.forEach((ex: Exam) => serverUpsertExam(ex));
-        }
-        if (data.results && Array.isArray(data.results)) {
-          setResults(data.results);
-          data.results.forEach((r: ExamResult) => serverSubmitResult(r));
-        }
-        if (data.users && Array.isArray(data.users)) {
-          setUsers(data.users);
-          data.users.forEach((u: UserAccount) => serverUpsertUser(u));
-        }
+        if (!data || typeof data !== 'object') throw new Error('Invalid format');
+
+        // 1. Smart Merge Questions (Keep existing + add new by ID)
+        const incomingBank: Question[] = Array.isArray(data.bank) ? data.bank : [];
+        const existingBankMap = new Map<string, Question>(questionBank.map((q) => [q.id, q]));
+        incomingBank.forEach((q) => existingBankMap.set(q.id, q));
+        const mergedBank: Question[] = Array.from(existingBankMap.values());
+        setQuestionBank(mergedBank);
+
+        // 2. Smart Merge Exams (Keep existing + add new by ID)
+        const incomingExams: Exam[] = Array.isArray(data.exams) ? data.exams : [];
+        const existingExamMap = new Map<string, Exam>(exams.map((ex) => [ex.id, ex]));
+        incomingExams.forEach((ex) => existingExamMap.set(ex.id, ex));
+        const mergedExams: Exam[] = Array.from(existingExamMap.values());
+        setExams(mergedExams);
+
+        // 3. Smart Merge Results (Keep existing + add new by ID)
+        const incomingResults: ExamResult[] = Array.isArray(data.results) ? data.results : [];
+        const existingResMap = new Map<string, ExamResult>(results.map((r) => [r.id, r]));
+        incomingResults.forEach((r) => existingResMap.set(r.id, r));
+        const mergedResults: ExamResult[] = Array.from(existingResMap.values());
+        setResults(mergedResults);
+
+        // 4. Smart Merge Users (Keep existing + add new by username)
+        const incomingUsers: UserAccount[] = Array.isArray(data.users) ? data.users : [];
+        const existingUserMap = new Map<string, UserAccount>(users.map((u) => [u.username, u]));
+        incomingUsers.forEach((u) => existingUserMap.set(u.username, u));
+        const mergedUsers: UserAccount[] = Array.from(existingUserMap.values());
+        setUsers(mergedUsers);
+
+        // 5. Update PIN if valid
         if (data.pin && typeof data.pin === 'string') {
           setSystemPin(data.pin);
           serverUpdatePin(data.pin);
         }
 
-        // Full broadcast to all connected devices
+        // Full broadcast to server and all connected devices
         serverFullSync({
-          exams: data.exams,
-          questionBank: data.bank,
-          results: data.results,
-          users: data.users,
-          systemPin: data.pin,
+          exams: mergedExams,
+          questionBank: mergedBank,
+          results: mergedResults,
+          users: mergedUsers,
+          systemPin: data.pin || systemPin,
         });
 
-        showToast('Đã khôi phục và đồng bộ toàn bộ dữ liệu tới mọi thiết bị thành công!', 'success');
+        // Dual-sync to Firestore in background
+        syncAllLocalDataToCloud(mergedExams, mergedBank, mergedResults, mergedUsers).catch(() => {});
+
+        showToast(
+          `Đã hợp nhất dữ liệu thành công: ${mergedBank.length} câu hỏi, ${mergedExams.length} đề thi, ${mergedResults.length} bài nộp!`,
+          'success'
+        );
       } catch {
         showToast('Tệp JSON sao lưu không hợp lệ!', 'error');
       }
