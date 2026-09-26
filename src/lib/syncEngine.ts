@@ -30,38 +30,61 @@ export interface SyncCallbacks {
 }
 
 /**
- * Fetch complete current data from server API
+ * Fetch complete current data from server API with timeout and cache-busting
  */
 export async function fetchServerSync(): Promise<SyncDataState | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 6000);
+
   try {
-    const res = await fetch('/api/sync', { cache: 'no-store' });
+    const res = await fetch(`/api/sync?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
     if (!res.ok) return null;
     const json = await res.json();
     if (json && json.success && json.data) {
       return json.data as SyncDataState;
     }
     return null;
-  } catch (err) {
-    console.warn('[SyncEngine] fetchServerSync error:', err);
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err?.name !== 'AbortError') {
+      console.warn('[SyncEngine] fetchServerSync error:', err?.message || err);
+    }
     return null;
   }
 }
 
 /**
- * Dispatch mutation to server API and broadcast to all devices
+ * Dispatch mutation to server API and broadcast to all devices with 1 retry
  */
 async function postSyncMutation(type: string, data: any): Promise<boolean> {
-  try {
-    const res = await fetch('/api/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, data }),
-    });
-    return res.ok;
-  } catch (err) {
-    console.warn(`[SyncEngine] postSyncMutation (${type}) error:`, err);
-    return false;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
+        },
+        body: JSON.stringify({ type, data }),
+      });
+      if (res.ok) return true;
+    } catch (err) {
+      if (attempt === 1) {
+        await new Promise((r) => setTimeout(r, 400));
+        continue;
+      }
+      console.warn(`[SyncEngine] postSyncMutation (${type}) error:`, err);
+    }
   }
+  return false;
 }
 
 // -------------------------------------------------------------
@@ -242,7 +265,30 @@ export function startSyncListener(callbacks: SyncCallbacks): () => void {
   // 2. Connect real-time SSE stream
   connectSSE();
 
-  // 3. Fallback heartbeat polling every 10 seconds to guarantee sync even on flaky networks
+  // 3. Resync on tab focus, visibilitychange, or online event
+  const handleWakeOrFocus = async () => {
+    if (isUnmounted) return;
+    const latest = await fetchServerSync();
+    if (!isUnmounted && latest) {
+      applyState(latest);
+      callbacks.onStatusChange?.('connected');
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', handleWakeOrFocus);
+    window.addEventListener('online', handleWakeOrFocus);
+  }
+  const onVisibilityChange = () => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      handleWakeOrFocus();
+    }
+  };
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onVisibilityChange);
+  }
+
+  // 4. Fallback heartbeat polling every 4 seconds to guarantee sync even on mobile/tablets
   pollInterval = setInterval(async () => {
     if (isUnmounted) return;
     const latest = await fetchServerSync();
@@ -250,12 +296,19 @@ export function startSyncListener(callbacks: SyncCallbacks): () => void {
       applyState(latest);
       callbacks.onStatusChange?.('connected');
     }
-  }, 10000);
+  }, 4000);
 
   return () => {
     isUnmounted = true;
     if (reconnectTimer) clearTimeout(reconnectTimer);
     if (pollInterval) clearInterval(pollInterval);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('focus', handleWakeOrFocus);
+      window.removeEventListener('online', handleWakeOrFocus);
+    }
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    }
     if (eventSource) {
       eventSource.close();
       eventSource = null;

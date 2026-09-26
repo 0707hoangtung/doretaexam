@@ -13,7 +13,7 @@ export const DEFAULT_ROOT_ADMIN: UserAccount = {
   displayName: 'Quản Trị Viên Tối Cao',
   email: 'hoangtuanh341992@gmail.com',
   role: 'super_admin',
-  password: 'Tunganh7787',
+  password: '123',
   subject: 'Toán Học - Quản Trị',
   school: 'Hệ Thống DoretaExam',
   createdAt: '2026-08-28',
@@ -32,11 +32,11 @@ export interface SyncDataState {
 
 // In-memory master state
 let state: SyncDataState = {
-  exams: [],
-  questionBank: [],
+  exams: initialExams,
+  questionBank: initialQuestionBank,
   results: [],
   users: [DEFAULT_ROOT_ADMIN],
-  systemPin: 'Tunganh7787',
+  systemPin: '123456',
   lastUpdated: new Date().toISOString(),
 };
 
@@ -57,11 +57,11 @@ export function initSyncStore(): void {
       const parsed = JSON.parse(raw);
       if (parsed) {
         state = {
-          exams: Array.isArray(parsed.exams) ? parsed.exams : [],
-          questionBank: Array.isArray(parsed.questionBank) ? parsed.questionBank : [],
+          exams: Array.isArray(parsed.exams) && parsed.exams.length > 0 ? parsed.exams : initialExams,
+          questionBank: Array.isArray(parsed.questionBank) && parsed.questionBank.length > 0 ? parsed.questionBank : initialQuestionBank,
           results: Array.isArray(parsed.results) ? parsed.results : [],
           users: Array.isArray(parsed.users) && parsed.users.length > 0 ? parsed.users : [DEFAULT_ROOT_ADMIN],
-          systemPin: typeof parsed.systemPin === 'string' ? parsed.systemPin : 'Tunganh7787',
+          systemPin: typeof parsed.systemPin === 'string' && parsed.systemPin.trim().length > 0 ? parsed.systemPin : '123456',
           lastUpdated: parsed.lastUpdated || new Date().toISOString(),
         };
         console.log(`[SyncStore] Loaded database with ${state.exams.length} exams, ${state.questionBank.length} questions.`);

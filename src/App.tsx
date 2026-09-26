@@ -27,6 +27,7 @@ import {
   DEFAULT_ROOT_ADMIN,
 } from './lib/firebase';
 import {
+  fetchServerSync,
   startSyncListener,
   serverUpsertExam,
   serverDeleteExam,
@@ -87,17 +88,20 @@ export default function App() {
   const [aiManageExam, setAiManageExam] = useState<Exam | null>(null);
   const [isAiManageCloneOpen, setIsAiManageCloneOpen] = useState(false);
 
-  // Data States with LocalStorage Cache + Cloud Firestore Sync
+  // Data States with LocalStorage Cache + Cloud Server Sync
   const [questionBank, setQuestionBank] = useState<Question[]>(() => {
-    return getStorageItem<Question[]>(STORAGE_KEYS.QBANK, []);
+    const stored = getStorageItem<Question[]>(STORAGE_KEYS.QBANK, []);
+    return Array.isArray(stored) && stored.length > 0 ? stored : initialQuestionBank;
   });
 
   const [exams, setExams] = useState<Exam[]>(() => {
-    return getStorageItem<Exam[]>(STORAGE_KEYS.EXAMS, []);
+    const stored = getStorageItem<Exam[]>(STORAGE_KEYS.EXAMS, []);
+    return Array.isArray(stored) && stored.length > 0 ? stored : initialExams;
   });
 
   const [results, setResults] = useState<ExamResult[]>(() => {
-    return getStorageItem<ExamResult[]>(STORAGE_KEYS.RESULTS, []);
+    const stored = getStorageItem<ExamResult[]>(STORAGE_KEYS.RESULTS, []);
+    return Array.isArray(stored) ? stored : [];
   });
 
   // Authoring Draft State (now fully persisted!)
@@ -212,29 +216,56 @@ export default function App() {
       },
     });
 
-    // 2. Secondary Firestore Listeners (Fail-safe cloud redundancy)
+    // 2. Reconcile locally authored data with server on mount
+    fetchServerSync().then((serverData) => {
+      if (!serverData) return;
+
+      const serverExamIds = new Set((serverData.exams || []).map((e) => e.id));
+      const localExams = getStorageItem<Exam[]>(STORAGE_KEYS.EXAMS, []) || [];
+      const missingExams = localExams.filter((e) => !serverExamIds.has(e.id));
+      if (missingExams.length > 0) {
+        missingExams.forEach((ex) => serverUpsertExam(ex));
+      }
+
+      const serverQIds = new Set((serverData.questionBank || []).map((q) => q.id));
+      const localBank = getStorageItem<Question[]>(STORAGE_KEYS.QBANK, []) || [];
+      const missingQs = localBank.filter((q) => !serverQIds.has(q.id));
+      if (missingQs.length > 0) {
+        missingQs.forEach((q) => serverUpsertQuestion(q));
+      }
+
+      const serverResultIds = new Set((serverData.results || []).map((r) => r.id));
+      const localResults = getStorageItem<ExamResult[]>(STORAGE_KEYS.RESULTS, []) || [];
+      const missingResults = localResults.filter((r) => !serverResultIds.has(r.id));
+      if (missingResults.length > 0) {
+        missingResults.forEach((r) => serverSubmitResult(r));
+      }
+    });
+
+    // 3. Secondary Firestore Listeners (Fail-safe cloud redundancy)
     const unsubPin = subscribeSystemPin((cloudPin) => {
       if (cloudPin && cloudPin !== systemPin) {
         setSystemPin(cloudPin);
+        setStorageItem(STORAGE_KEYS.PIN, cloudPin);
       }
     });
 
     const unsubExams = subscribeExams((cloudExams) => {
-      if (Array.isArray(cloudExams)) {
+      if (Array.isArray(cloudExams) && cloudExams.length > 0) {
         setExams(cloudExams);
         setStorageItem(STORAGE_KEYS.EXAMS, cloudExams);
       }
     });
 
     const unsubBank = subscribeQuestionBank((cloudBank) => {
-      if (Array.isArray(cloudBank)) {
+      if (Array.isArray(cloudBank) && cloudBank.length > 0) {
         setQuestionBank(cloudBank);
         setStorageItem(STORAGE_KEYS.QBANK, cloudBank);
       }
     });
 
     const unsubResults = subscribeExamResults((cloudResults) => {
-      if (Array.isArray(cloudResults)) {
+      if (Array.isArray(cloudResults) && cloudResults.length > 0) {
         setResults(cloudResults);
         setStorageItem(STORAGE_KEYS.RESULTS, cloudResults);
       }

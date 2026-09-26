@@ -61,12 +61,10 @@ export async function fetchSystemPin(): Promise<string> {
     if (snap.exists() && snap.data()?.adminPin) {
       return snap.data().adminPin;
     }
-    // If not exists, initialize with default PIN 'Tunganh7787'
-    await setDoc(docRef, { adminPin: 'Tunganh7787', updatedAt: new Date().toISOString() });
-    return 'Tunganh7787';
+    return '123456';
   } catch (error) {
-    console.warn('[Firebase] fetchSystemPin fallback:', error);
-    return 'Tunganh7787';
+    console.warn('[Firebase] fetchSystemPin fallback to default:', error);
+    return '123456';
   }
 }
 
@@ -79,24 +77,29 @@ export async function updateSystemPin(newPin: string): Promise<boolean> {
     }, { merge: true });
     return true;
   } catch (error) {
-    console.error('[Firebase] updateSystemPin error:', error);
+    console.warn('[Firebase] updateSystemPin warning:', error);
     return false;
   }
 }
 
 export function subscribeSystemPin(callback: (pin: string) => void): () => void {
-  const docRef = doc(db, COLLECTIONS.SETTINGS, 'global');
-  return onSnapshot(
-    docRef,
-    (snap) => {
-      if (snap.exists() && snap.data()?.adminPin) {
-        callback(snap.data().adminPin);
+  try {
+    const docRef = doc(db, COLLECTIONS.SETTINGS, 'global');
+    return onSnapshot(
+      docRef,
+      (snap) => {
+        if (snap.exists() && snap.data()?.adminPin) {
+          callback(snap.data().adminPin);
+        }
+      },
+      (err) => {
+        console.warn('[Firebase] subscribeSystemPin warning:', err?.message || err);
       }
-    },
-    (err) => {
-      console.warn('[Firebase] subscribeSystemPin error:', err);
-    }
-  );
+    );
+  } catch (err) {
+    console.warn('[Firebase] subscribeSystemPin setup warning:', err);
+    return () => {};
+  }
 }
 
 // -------------------------------------------------------------
@@ -134,57 +137,70 @@ export function sanitizeForFirestore<T>(data: T): any {
 // -------------------------------------------------------------
 
 export function subscribeExams(callback: (exams: Exam[]) => void): () => void {
-  const colRef = collection(db, COLLECTIONS.EXAMS);
-  return onSnapshot(
-    colRef,
-    async (snapshot) => {
-      if (snapshot.empty) {
-        callback([]);
-        return;
+  try {
+    const colRef = collection(db, COLLECTIONS.EXAMS);
+    return onSnapshot(
+      colRef,
+      async (snapshot) => {
+        // Crucial: Never wipe out local/server exams if snapshot is empty or quota is reached
+        if (snapshot.empty) {
+          return;
+        }
+
+        const list: Exam[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data() as Exam;
+          if (data && data.id && data.code) {
+            list.push(data);
+          }
+        });
+
+        if (list.length === 0) {
+          return;
+        }
+
+        // Sort newest created first
+        list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        
+        // Immediately notify listeners with the current exam documents
+        callback(list);
+
+        // In background, resolve any cloud-media references and re-emit when resolved
+        const hasCloudMedia = list.some((e) =>
+          e.questions?.some((q) => q.audio && q.audio.startsWith('cloud-media://'))
+        );
+
+        if (hasCloudMedia) {
+          Promise.all(
+            list.map(async (exam) => {
+              const resolvedQuestions = await Promise.all(
+                (exam.questions || []).map(async (q) => {
+                  if (q.audio && q.audio.startsWith('cloud-media://')) {
+                    const resolvedAudio = await resolveAudioUrl(q.audio);
+                    return { ...q, audio: resolvedAudio };
+                  }
+                  return q;
+                })
+              );
+              return { ...exam, questions: resolvedQuestions };
+            })
+          )
+            .then((resolvedList) => {
+              callback(resolvedList);
+            })
+            .catch((err) => {
+              console.warn('[Firebase] Background exam media resolution warning:', err);
+            });
+        }
+      },
+      (error) => {
+        console.warn('[Firebase] subscribeExams error:', error?.message || error);
       }
-
-      const list: Exam[] = [];
-      snapshot.forEach((docSnap) => {
-        list.push(docSnap.data() as Exam);
-      });
-      // Sort newest created first
-      list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-      
-      // Immediately notify listeners with the current exam documents
-      callback(list);
-
-      // In background, resolve any cloud-media references and re-emit when resolved
-      const hasCloudMedia = list.some((e) =>
-        e.questions?.some((q) => q.audio && q.audio.startsWith('cloud-media://'))
-      );
-
-      if (hasCloudMedia) {
-        Promise.all(
-          list.map(async (exam) => {
-            const resolvedQuestions = await Promise.all(
-              (exam.questions || []).map(async (q) => {
-                if (q.audio && q.audio.startsWith('cloud-media://')) {
-                  const resolvedAudio = await resolveAudioUrl(q.audio);
-                  return { ...q, audio: resolvedAudio };
-                }
-                return q;
-              })
-            );
-            return { ...exam, questions: resolvedQuestions };
-          })
-        )
-          .then((resolvedList) => {
-            callback(resolvedList);
-          })
-          .catch((err) => {
-            console.warn('[Firebase] Background exam media resolution warning:', err);
-          });
-      }
-    },
-    (error) => {
-      console.warn('[Firebase] subscribeExams error:', error);
-    }
-  );
+    );
+  } catch (err) {
+    console.warn('[Firebase] subscribeExams setup error:', err);
+    return () => {};
+  }
 }
 
 export async function saveExamToCloud(exam: Exam): Promise<boolean> {
@@ -237,45 +253,57 @@ export async function deleteExamFromCloud(examId: string): Promise<boolean> {
 // -------------------------------------------------------------
 
 export function subscribeQuestionBank(callback: (questions: Question[]) => void): () => void {
-  const colRef = collection(db, COLLECTIONS.QBANK);
-  return onSnapshot(
-    colRef,
-    async (snapshot) => {
-      if (snapshot.empty) {
-        callback([]);
-        return;
-      }
+  try {
+    const colRef = collection(db, COLLECTIONS.QBANK);
+    return onSnapshot(
+      colRef,
+      async (snapshot) => {
+        if (snapshot.empty) {
+          return;
+        }
 
-      const list: Question[] = [];
-      snapshot.forEach((docSnap) => {
-        list.push(docSnap.data() as Question);
-      });
-      callback(list);
+        const list: Question[] = [];
+        snapshot.forEach((docSnap) => {
+          const q = docSnap.data() as Question;
+          if (q && q.id && q.content) {
+            list.push(q);
+          }
+        });
 
-      // In background, resolve any cloud-media references in question bank
-      const hasCloudMedia = list.some((q) => q.audio && q.audio.startsWith('cloud-media://'));
-      if (hasCloudMedia) {
-        Promise.all(
-          list.map(async (q) => {
-            if (q.audio && q.audio.startsWith('cloud-media://')) {
-              const resolvedAudio = await resolveAudioUrl(q.audio);
-              return { ...q, audio: resolvedAudio };
-            }
-            return q;
-          })
-        )
-          .then((resolvedList) => {
-            callback(resolvedList);
-          })
-          .catch((err) => {
-            console.warn('[Firebase] Background question bank media resolution warning:', err);
-          });
+        if (list.length === 0) {
+          return;
+        }
+
+        callback(list);
+
+        // In background, resolve any cloud-media references in question bank
+        const hasCloudMedia = list.some((q) => q.audio && q.audio.startsWith('cloud-media://'));
+        if (hasCloudMedia) {
+          Promise.all(
+            list.map(async (q) => {
+              if (q.audio && q.audio.startsWith('cloud-media://')) {
+                const resolvedAudio = await resolveAudioUrl(q.audio);
+                return { ...q, audio: resolvedAudio };
+              }
+              return q;
+            })
+          )
+            .then((resolvedList) => {
+              callback(resolvedList);
+            })
+            .catch((err) => {
+              console.warn('[Firebase] Background question bank media resolution warning:', err);
+            });
+        }
+      },
+      (error) => {
+        console.warn('[Firebase] subscribeQuestionBank error:', error?.message || error);
       }
-    },
-    (error) => {
-      console.warn('[Firebase] subscribeQuestionBank error:', error);
-    }
-  );
+    );
+  } catch (err) {
+    console.warn('[Firebase] subscribeQuestionBank setup error:', err);
+    return () => {};
+  }
 }
 
 export async function saveQuestionToCloud(question: Question): Promise<boolean> {
@@ -292,7 +320,7 @@ export async function saveQuestionToCloud(question: Question): Promise<boolean> 
     await setDoc(docRef, sanitizedQ, { merge: true });
     return true;
   } catch (error) {
-    console.error('[Firebase] saveQuestionToCloud error:', error);
+    console.warn('[Firebase] saveQuestionToCloud warning:', error);
     return false;
   }
 }
@@ -303,7 +331,7 @@ export async function deleteQuestionFromCloud(questionId: string): Promise<boole
     await deleteDoc(docRef);
     return true;
   } catch (error) {
-    console.error('[Firebase] deleteQuestionFromCloud error:', error);
+    console.warn('[Firebase] deleteQuestionFromCloud warning:', error);
     return false;
   }
 }
@@ -313,22 +341,39 @@ export async function deleteQuestionFromCloud(questionId: string): Promise<boole
 // -------------------------------------------------------------
 
 export function subscribeExamResults(callback: (results: ExamResult[]) => void): () => void {
-  const colRef = collection(db, COLLECTIONS.RESULTS);
-  return onSnapshot(
-    colRef,
-    (snapshot) => {
-      const list: ExamResult[] = [];
-      snapshot.forEach((docSnap) => {
-        list.push(docSnap.data() as ExamResult);
-      });
-      // Sort newest submission first
-      list.sort((a, b) => new Date(b.submittedAt || 0).getTime() - new Date(a.submittedAt || 0).getTime());
-      callback(list);
-    },
-    (error) => {
-      console.warn('[Firebase] subscribeExamResults error:', error);
-    }
-  );
+  try {
+    const colRef = collection(db, COLLECTIONS.RESULTS);
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        if (snapshot.empty) {
+          return;
+        }
+
+        const list: ExamResult[] = [];
+        snapshot.forEach((docSnap) => {
+          const r = docSnap.data() as ExamResult;
+          if (r && r.id && r.examCode) {
+            list.push(r);
+          }
+        });
+
+        if (list.length === 0) {
+          return;
+        }
+
+        // Sort newest submission first
+        list.sort((a, b) => new Date(b.submittedAt || 0).getTime() - new Date(a.submittedAt || 0).getTime());
+        callback(list);
+      },
+      (error) => {
+        console.warn('[Firebase] subscribeExamResults error:', error?.message || error);
+      }
+    );
+  } catch (err) {
+    console.warn('[Firebase] subscribeExamResults setup error:', err);
+    return () => {};
+  }
 }
 
 export async function submitExamResultToCloud(result: ExamResult): Promise<boolean> {
@@ -338,7 +383,7 @@ export async function submitExamResultToCloud(result: ExamResult): Promise<boole
     await setDoc(docRef, sanitizedResult, { merge: true });
     return true;
   } catch (error) {
-    console.error('[Firebase] submitExamResultToCloud error:', error);
+    console.warn('[Firebase] submitExamResultToCloud warning:', error);
     return false;
   }
 }
@@ -349,7 +394,7 @@ export async function deleteExamResultFromCloud(resultId: string): Promise<boole
     await deleteDoc(docRef);
     return true;
   } catch (error) {
-    console.error('[Firebase] deleteExamResultFromCloud error:', error);
+    console.warn('[Firebase] deleteExamResultFromCloud warning:', error);
     return false;
   }
 }
@@ -364,7 +409,7 @@ export const DEFAULT_ROOT_ADMIN: UserAccount = {
   displayName: 'Quản Trị Viên Tối Cao',
   email: 'hoangtuanh341992@gmail.com',
   role: 'super_admin',
-  password: 'Tunganh7787',
+  password: '123',
   subject: 'Toán Học - Quản Trị',
   school: 'Hệ Thống DoretaExam',
   createdAt: '2026-08-28',
@@ -373,48 +418,35 @@ export const DEFAULT_ROOT_ADMIN: UserAccount = {
 };
 
 export function subscribeUsers(callback: (users: UserAccount[]) => void): () => void {
-  const colRef = collection(db, COLLECTIONS.USERS);
-  return onSnapshot(
-    colRef,
-    async (snapshot) => {
-      if (snapshot.empty) {
-        // Seed default super admin account
-        try {
-          await setDoc(doc(db, COLLECTIONS.USERS, DEFAULT_ROOT_ADMIN.id), sanitizeForFirestore(DEFAULT_ROOT_ADMIN));
-          callback([DEFAULT_ROOT_ADMIN]);
-          return;
-        } catch (e) {
-          console.warn('[Firebase] Seed root admin error:', e);
+  try {
+    const colRef = collection(db, COLLECTIONS.USERS);
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        if (snapshot.empty) {
           return;
         }
-      }
 
-      const list: UserAccount[] = [];
-      let hasAdmin = false;
-      snapshot.forEach((docSnap) => {
-        const u = docSnap.data() as UserAccount;
-        if (u && u.id && u.username) {
-          list.push(u);
-          if (u.role === 'super_admin' || u.username === 'admin') {
-            hasAdmin = true;
+        const list: UserAccount[] = [];
+        snapshot.forEach((docSnap) => {
+          const u = docSnap.data() as UserAccount;
+          if (u && u.id && u.username) {
+            list.push(u);
           }
+        });
+
+        if (list.length > 0) {
+          callback(list);
         }
-      });
-
-      // Ensure root admin exists
-      if (!hasAdmin && list.length > 0) {
-        try {
-          await setDoc(doc(db, COLLECTIONS.USERS, DEFAULT_ROOT_ADMIN.id), sanitizeForFirestore(DEFAULT_ROOT_ADMIN));
-          list.unshift(DEFAULT_ROOT_ADMIN);
-        } catch {}
+      },
+      (error) => {
+        console.warn('[Firebase] subscribeUsers error:', error?.message || error);
       }
-
-      callback(list);
-    },
-    (error) => {
-      console.warn('[Firebase] subscribeUsers error:', error);
-    }
-  );
+    );
+  } catch (err) {
+    console.warn('[Firebase] subscribeUsers setup error:', err);
+    return () => {};
+  }
 }
 
 export async function saveUserToCloud(user: UserAccount): Promise<boolean> {
