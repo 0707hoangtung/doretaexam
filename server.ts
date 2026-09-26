@@ -8,8 +8,10 @@ import {
   addSseClient,
   removeSseClient,
   upsertExam,
+  upsertExams,
   deleteExam,
   upsertQuestion,
+  upsertQuestions,
   deleteQuestion,
   submitResult,
   deleteResult,
@@ -83,11 +85,17 @@ app.post('/api/sync', (req, res) => {
     case 'UPSERT_EXAM':
       if (data && data.id) updatedState = upsertExam(data);
       break;
+    case 'BATCH_UPSERT_EXAMS':
+      if (Array.isArray(data)) updatedState = upsertExams(data);
+      break;
     case 'DELETE_EXAM':
       if (data && data.id) updatedState = deleteExam(data.id);
       break;
     case 'UPSERT_QUESTION':
       if (data && data.id) updatedState = upsertQuestion(data);
+      break;
+    case 'BATCH_UPSERT_QUESTIONS':
+      if (Array.isArray(data)) updatedState = upsertQuestions(data);
       break;
     case 'DELETE_QUESTION':
       if (data && data.id) updatedState = deleteQuestion(data.id);

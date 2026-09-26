@@ -10,17 +10,12 @@ import {
 import {
   fetchSystemPin,
   updateSystemPin,
-  subscribeSystemPin,
-  subscribeExams,
   saveExamToCloud,
   deleteExamFromCloud,
-  subscribeQuestionBank,
   saveQuestionToCloud,
   deleteQuestionFromCloud,
-  subscribeExamResults,
   submitExamResultToCloud,
   deleteExamResultFromCloud,
-  subscribeUsers,
   saveUserToCloud,
   deleteUserFromCloud,
   syncAllLocalDataToCloud,
@@ -30,8 +25,10 @@ import {
   fetchServerSync,
   startSyncListener,
   serverUpsertExam,
+  serverUpsertExams,
   serverDeleteExam,
   serverUpsertQuestion,
+  serverUpsertQuestions,
   serverDeleteQuestion,
   serverSubmitResult,
   serverDeleteResult,
@@ -222,16 +219,22 @@ export default function App() {
 
       const serverExamIds = new Set((serverData.exams || []).map((e) => e.id));
       const localExams = getStorageItem<Exam[]>(STORAGE_KEYS.EXAMS, []) || [];
-      const missingExams = localExams.filter((e) => !serverExamIds.has(e.id));
-      if (missingExams.length > 0) {
-        missingExams.forEach((ex) => serverUpsertExam(ex));
+      // Only upload custom user-authored exams that are NOT default sample exams
+      const customMissingExams = localExams.filter(
+        (e) => !serverExamIds.has(e.id) && e.id !== 'exam-default-1' && e.id !== 'exam-default-2'
+      );
+      if (customMissingExams.length > 0) {
+        serverUpsertExams(customMissingExams);
       }
 
       const serverQIds = new Set((serverData.questionBank || []).map((q) => q.id));
       const localBank = getStorageItem<Question[]>(STORAGE_KEYS.QBANK, []) || [];
-      const missingQs = localBank.filter((q) => !serverQIds.has(q.id));
-      if (missingQs.length > 0) {
-        missingQs.forEach((q) => serverUpsertQuestion(q));
+      // Only upload custom user-authored questions that are NOT default sample questions
+      const customMissingQs = localBank.filter(
+        (q) => !serverQIds.has(q.id) && !q.id.startsWith('q-sample-')
+      );
+      if (customMissingQs.length > 0) {
+        serverUpsertQuestions(customMissingQs);
       }
 
       const serverResultIds = new Set((serverData.results || []).map((r) => r.id));
@@ -242,53 +245,8 @@ export default function App() {
       }
     });
 
-    // 3. Secondary Firestore Listeners (Fail-safe cloud redundancy)
-    const unsubPin = subscribeSystemPin((cloudPin) => {
-      if (cloudPin && cloudPin !== systemPin) {
-        setSystemPin(cloudPin);
-        setStorageItem(STORAGE_KEYS.PIN, cloudPin);
-      }
-    });
-
-    const unsubExams = subscribeExams((cloudExams) => {
-      if (Array.isArray(cloudExams) && cloudExams.length > 0) {
-        setExams(cloudExams);
-        setStorageItem(STORAGE_KEYS.EXAMS, cloudExams);
-      }
-    });
-
-    const unsubBank = subscribeQuestionBank((cloudBank) => {
-      if (Array.isArray(cloudBank) && cloudBank.length > 0) {
-        setQuestionBank(cloudBank);
-        setStorageItem(STORAGE_KEYS.QBANK, cloudBank);
-      }
-    });
-
-    const unsubResults = subscribeExamResults((cloudResults) => {
-      if (Array.isArray(cloudResults) && cloudResults.length > 0) {
-        setResults(cloudResults);
-        setStorageItem(STORAGE_KEYS.RESULTS, cloudResults);
-      }
-    });
-
-    const unsubUsers = subscribeUsers((cloudUsers) => {
-      if (Array.isArray(cloudUsers) && cloudUsers.length > 0) {
-        setUsers(cloudUsers);
-        setStorageItem(STORAGE_KEYS.USERS, cloudUsers);
-      }
-    });
-
-    fetchSystemPin().then((pin) => {
-      if (pin) setSystemPin(pin);
-    });
-
     return () => {
       unsubServer();
-      unsubPin();
-      unsubExams();
-      unsubBank();
-      unsubResults();
-      unsubUsers();
     };
   }, []);
 
@@ -491,7 +449,7 @@ export default function App() {
       const newItems = stampedQs.filter((item) => !existingIds.has(item.id));
       return [...newItems, ...prev];
     });
-    stampedQs.forEach((q) => serverUpsertQuestion(q));
+    serverUpsertQuestions(stampedQs);
     showToast(`Đã đồng bộ toàn bộ ${draftingQuestions.length} câu hỏi lên Ngân hàng đám mây!`, 'success');
   };
 
@@ -559,8 +517,8 @@ export default function App() {
     });
 
     // 4. Dual-sync to Server (broadcasts via SSE to all devices in ~50ms) + Firestore
-    stampedQs.forEach((q) => serverUpsertQuestion(q));
-    generatedVariants.forEach((exam) => serverUpsertExam(exam));
+    serverUpsertQuestions(stampedQs);
+    serverUpsertExams(generatedVariants);
 
     setDraftingQuestions([]);
     setIsPublishOpen(false);
@@ -738,6 +696,8 @@ export default function App() {
         isOnline={isOnline}
         theme={theme}
         onToggleTheme={handleToggleTheme}
+        onForceSync={handleForceCloudSync}
+        isSyncing={isSyncingCloud}
       />
 
       {/* Main Content Area */}

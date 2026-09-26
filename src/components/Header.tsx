@@ -29,6 +29,8 @@ interface HeaderProps {
   onLogout?: () => void;
   theme?: 'cyan-lime' | 'dark';
   onToggleTheme?: () => void;
+  onForceSync?: () => void;
+  isSyncing?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -44,6 +46,8 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   theme = 'cyan-lime',
   onToggleTheme,
+  onForceSync,
+  isSyncing = false,
 }) => {
   const isSuperAdmin = currentUser?.role === 'super_admin';
 
@@ -64,23 +68,27 @@ export const Header: React.FC<HeaderProps> = ({
                 DORETA&apos;S EXAM
               </h1>
               {!isOnline ? (
-                <span
-                  className="inline-flex items-center gap-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm"
-                  title="Không có kết nối mạng. Dữ liệu được lưu tạm trên thiết bị."
+                <button
+                  type="button"
+                  onClick={onForceSync}
+                  className="inline-flex items-center gap-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm hover:bg-amber-500/30 transition-all cursor-pointer"
+                  title="Không có kết nối mạng. Bấm để thử kết nối và đồng bộ lại."
                 >
                   <WifiOff className="w-2.5 h-2.5 text-amber-400" />
-                  <span>Ngoại tuyến (Offline)</span>
-                </span>
+                  <span>Ngoại tuyến (Thử lại)</span>
+                </button>
               ) : (
-                <span
-                  className="inline-flex items-center gap-1.5 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full shadow-sm"
-                  title="Hệ thống đang kết nối trực tuyến và đồng bộ dữ liệu thời gian thực"
+                <button
+                  type="button"
+                  onClick={onForceSync}
+                  className="inline-flex items-center gap-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full shadow-sm transition-all cursor-pointer active:scale-95"
+                  title="Hệ thống đang kết nối trực tuyến và đồng bộ dữ liệu thời gian thực. Bấm để đồng bộ tức thì."
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-                  <span className="hidden sm:inline">Trực tuyến (Online)</span>
-                  <span className="sm:hidden">Online</span>
-                  <Cloud className="w-3 h-3 text-emerald-400 shrink-0" />
-                </span>
+                  <span className={`w-1.5 h-1.5 rounded-full bg-emerald-400 ${isSyncing ? 'animate-ping' : 'animate-pulse'} shrink-0`}></span>
+                  <span className="hidden sm:inline">{isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ Đa Thiết Bị'}</span>
+                  <span className="sm:hidden">{isSyncing ? 'Sync...' : 'Online'}</span>
+                  <Cloud className={`w-3 h-3 text-emerald-400 shrink-0 ${isSyncing ? 'animate-bounce' : ''}`} />
+                </button>
               )}
             </div>
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest hidden sm:block mt-0.5 leading-normal">

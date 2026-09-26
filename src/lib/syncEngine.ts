@@ -98,6 +98,13 @@ export async function serverUpsertExam(exam: Exam): Promise<void> {
   ]);
 }
 
+export async function serverUpsertExams(exams: Exam[]): Promise<void> {
+  await Promise.allSettled([
+    postSyncMutation('BATCH_UPSERT_EXAMS', exams),
+    ...exams.map((e) => saveExamToCloud(e)),
+  ]);
+}
+
 export async function serverDeleteExam(examId: string): Promise<void> {
   await Promise.allSettled([
     postSyncMutation('DELETE_EXAM', { id: examId }),
@@ -109,6 +116,13 @@ export async function serverUpsertQuestion(question: Question): Promise<void> {
   await Promise.allSettled([
     postSyncMutation('UPSERT_QUESTION', question),
     saveQuestionToCloud(question),
+  ]);
+}
+
+export async function serverUpsertQuestions(questions: Question[]): Promise<void> {
+  await Promise.allSettled([
+    postSyncMutation('BATCH_UPSERT_QUESTIONS', questions),
+    ...questions.map((q) => saveQuestionToCloud(q)),
   ]);
 }
 

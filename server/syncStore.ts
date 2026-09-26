@@ -43,6 +43,37 @@ let state: SyncDataState = {
 // Connected SSE clients
 const sseClients = new Set<Response>();
 
+let saveTimeout: NodeJS.Timeout | null = null;
+
+/**
+ * Save in-memory state to disk safely with debouncing
+ */
+function saveStateToDisk(immediate: boolean = false): void {
+  const doSave = () => {
+    try {
+      if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      }
+      state.lastUpdated = new Date().toISOString();
+      fs.writeFileSync(DATA_FILE, JSON.stringify(state, null, 2), 'utf-8');
+    } catch (err) {
+      console.error('[SyncStore] saveStateToDisk error:', err);
+    }
+  };
+
+  if (immediate) {
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = null;
+    doSave();
+  } else {
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => {
+      saveTimeout = null;
+      doSave();
+    }, 150);
+  }
+}
+
 /**
  * Initialize data from local filesystem
  */
@@ -57,38 +88,23 @@ export function initSyncStore(): void {
       const parsed = JSON.parse(raw);
       if (parsed) {
         state = {
-          exams: Array.isArray(parsed.exams) && parsed.exams.length > 0 ? parsed.exams : initialExams,
-          questionBank: Array.isArray(parsed.questionBank) && parsed.questionBank.length > 0 ? parsed.questionBank : initialQuestionBank,
+          exams: Array.isArray(parsed.exams) ? parsed.exams : initialExams,
+          questionBank: Array.isArray(parsed.questionBank) ? parsed.questionBank : initialQuestionBank,
           results: Array.isArray(parsed.results) ? parsed.results : [],
           users: Array.isArray(parsed.users) && parsed.users.length > 0 ? parsed.users : [DEFAULT_ROOT_ADMIN],
           systemPin: typeof parsed.systemPin === 'string' && parsed.systemPin.trim().length > 0 ? parsed.systemPin : '123456',
           lastUpdated: parsed.lastUpdated || new Date().toISOString(),
         };
-        console.log(`[SyncStore] Loaded database with ${state.exams.length} exams, ${state.questionBank.length} questions.`);
+        console.log(`[SyncStore] Loaded database with ${state.exams.length} exams, ${state.questionBank.length} questions, ${state.results.length} results.`);
         return;
       }
     }
 
     // If no existing file, write default state
-    saveStateToDisk();
+    saveStateToDisk(true);
     console.log(`[SyncStore] Initialized brand new database file at ${DATA_FILE}`);
   } catch (err) {
     console.error('[SyncStore] initSyncStore error:', err);
-  }
-}
-
-/**
- * Save in-memory state to disk
- */
-function saveStateToDisk(): void {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    state.lastUpdated = new Date().toISOString();
-    fs.writeFileSync(DATA_FILE, JSON.stringify(state, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('[SyncStore] saveStateToDisk error:', err);
   }
 }
 
@@ -155,6 +171,17 @@ export function upsertExam(exam: Exam): SyncDataState {
   return state;
 }
 
+export function upsertExams(exams: Exam[]): SyncDataState {
+  if (!Array.isArray(exams) || exams.length === 0) return state;
+  const examMap = new Map(state.exams.map((e) => [e.id, e]));
+  for (const ex of exams) {
+    if (ex && ex.id) examMap.set(ex.id, ex);
+  }
+  state.exams = Array.from(examMap.values());
+  broadcastSync('BATCH_UPSERT_EXAMS', exams);
+  return state;
+}
+
 export function deleteExam(examId: string): SyncDataState {
   state.exams = state.exams.filter((e) => e.id !== examId);
   broadcastSync('DELETE_EXAM', { id: examId });
@@ -169,6 +196,17 @@ export function upsertQuestion(question: Question): SyncDataState {
     state.questionBank = [question, ...state.questionBank];
   }
   broadcastSync('UPSERT_QUESTION', question);
+  return state;
+}
+
+export function upsertQuestions(questions: Question[]): SyncDataState {
+  if (!Array.isArray(questions) || questions.length === 0) return state;
+  const qMap = new Map(state.questionBank.map((q) => [q.id, q]));
+  for (const q of questions) {
+    if (q && q.id) qMap.set(q.id, q);
+  }
+  state.questionBank = Array.from(qMap.values());
+  broadcastSync('BATCH_UPSERT_QUESTIONS', questions);
   return state;
 }
 
