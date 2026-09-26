@@ -179,8 +179,26 @@ export async function serverFullSync(data: Partial<SyncDataState>): Promise<bool
   return postSyncMutation('FULL_SYNC', data);
 }
 
+// BroadcastChannel for instant cross-tab sync in the same browser (< 1ms)
+let globalBroadcastChannel: BroadcastChannel | null = null;
+if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+  try {
+    globalBroadcastChannel = new BroadcastChannel('doreta_realtime_sync_channel');
+  } catch (e) {
+    console.warn('[SyncEngine] BroadcastChannel not supported:', e);
+  }
+}
+
+export function broadcastLocalStateToTabs(state: SyncDataState): void {
+  if (globalBroadcastChannel && state) {
+    try {
+      globalBroadcastChannel.postMessage({ type: 'SYNC_STATE', state });
+    } catch {}
+  }
+}
+
 /**
- * Start real-time SSE listener with fallback polling
+ * Start real-time SSE listener with fallback polling and BroadcastChannel
  */
 export function startSyncListener(callbacks: SyncCallbacks): () => void {
   let eventSource: EventSource | null = null;
@@ -197,6 +215,19 @@ export function startSyncListener(callbacks: SyncCallbacks): () => void {
     if (typeof state.systemPin === 'string') callbacks.onPin(state.systemPin);
   };
 
+  // Listen to same-browser tab broadcasts for instant 0ms latency
+  const handleBroadcastMessage = (e: MessageEvent) => {
+    if (isUnmounted) return;
+    if (e.data && e.data.type === 'SYNC_STATE' && e.data.state) {
+      applyState(e.data.state);
+      callbacks.onStatusChange?.('connected');
+    }
+  };
+
+  if (globalBroadcastChannel) {
+    globalBroadcastChannel.addEventListener('message', handleBroadcastMessage);
+  }
+
   const connectSSE = () => {
     if (isUnmounted) return;
     try {
@@ -207,6 +238,7 @@ export function startSyncListener(callbacks: SyncCallbacks): () => void {
         try {
           const data = JSON.parse(e.data);
           applyState(data);
+          broadcastLocalStateToTabs(data);
           callbacks.onStatusChange?.('connected');
         } catch (err) {
           console.warn('[SyncEngine] Parse init error:', err);
@@ -218,6 +250,7 @@ export function startSyncListener(callbacks: SyncCallbacks): () => void {
           const parsed = JSON.parse(e.data);
           if (parsed && parsed.state) {
             applyState(parsed.state);
+            broadcastLocalStateToTabs(parsed.state);
           }
           callbacks.onStatusChange?.('connected');
         } catch (err) {
@@ -230,8 +263,6 @@ export function startSyncListener(callbacks: SyncCallbacks): () => void {
       };
 
       eventSource.onerror = () => {
-        // SSE reconnecting or momentarily disrupted.
-        // DO NOT falsely mark offline if the user has active internet and the HTTP server responds!
         if (typeof navigator !== 'undefined' && !navigator.onLine) {
           callbacks.onStatusChange?.('offline');
         } else {
@@ -252,9 +283,9 @@ export function startSyncListener(callbacks: SyncCallbacks): () => void {
           eventSource.close();
           eventSource = null;
         }
-        // Auto reconnect after 3 seconds
+        // Auto reconnect after 2 seconds
         if (!isUnmounted) {
-          reconnectTimer = setTimeout(connectSSE, 3000);
+          reconnectTimer = setTimeout(connectSSE, 2000);
         }
       };
     } catch (err) {
@@ -263,7 +294,7 @@ export function startSyncListener(callbacks: SyncCallbacks): () => void {
         callbacks.onStatusChange?.('offline');
       }
       if (!isUnmounted) {
-        reconnectTimer = setTimeout(connectSSE, 4000);
+        reconnectTimer = setTimeout(connectSSE, 2500);
       }
     }
   };
@@ -272,6 +303,7 @@ export function startSyncListener(callbacks: SyncCallbacks): () => void {
   fetchServerSync().then((initial) => {
     if (!isUnmounted && initial) {
       applyState(initial);
+      broadcastLocalStateToTabs(initial);
       callbacks.onStatusChange?.('connected');
     }
   });
@@ -285,6 +317,7 @@ export function startSyncListener(callbacks: SyncCallbacks): () => void {
     const latest = await fetchServerSync();
     if (!isUnmounted && latest) {
       applyState(latest);
+      broadcastLocalStateToTabs(latest);
       callbacks.onStatusChange?.('connected');
     }
   };
@@ -302,7 +335,7 @@ export function startSyncListener(callbacks: SyncCallbacks): () => void {
     document.addEventListener('visibilitychange', onVisibilityChange);
   }
 
-  // 4. Fallback heartbeat polling every 4 seconds to guarantee sync even on mobile/tablets
+  // 4. Fallback heartbeat polling every 2 seconds to guarantee rapid sync across mobile, tablets, & tabs
   pollInterval = setInterval(async () => {
     if (isUnmounted) return;
     const latest = await fetchServerSync();
@@ -310,12 +343,15 @@ export function startSyncListener(callbacks: SyncCallbacks): () => void {
       applyState(latest);
       callbacks.onStatusChange?.('connected');
     }
-  }, 4000);
+  }, 2000);
 
   return () => {
     isUnmounted = true;
     if (reconnectTimer) clearTimeout(reconnectTimer);
     if (pollInterval) clearInterval(pollInterval);
+    if (globalBroadcastChannel) {
+      globalBroadcastChannel.removeEventListener('message', handleBroadcastMessage);
+    }
     if (typeof window !== 'undefined') {
       window.removeEventListener('focus', handleWakeOrFocus);
       window.removeEventListener('online', handleWakeOrFocus);

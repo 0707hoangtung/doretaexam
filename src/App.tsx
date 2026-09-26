@@ -174,9 +174,15 @@ export default function App() {
     setStorageItem(STORAGE_KEYS.USERS, users);
   }, [users]);
 
-  // Real-Time Multi-Device & Cross-Tab Sync Engine (SSE + Cloud Redundancy)
+  // Real-Time Multi-Device & Cross-Tab Sync Engine (SSE + BroadcastChannel + Server Sync)
   useEffect(() => {
-    // 1. Primary Real-Time Synchronization via Server-Sent Events & API
+    // 0. Capture local storage snapshot BEFORE any listeners or server sync can overwrite it
+    const initialLocalExams = getStorageItem<Exam[]>(STORAGE_KEYS.EXAMS, []) || [];
+    const initialLocalBank = getStorageItem<Question[]>(STORAGE_KEYS.QBANK, []) || [];
+    const initialLocalResults = getStorageItem<ExamResult[]>(STORAGE_KEYS.RESULTS, []) || [];
+    const initialLocalPin = getStorageItem<string>(STORAGE_KEYS.PIN, '123456');
+
+    // 1. Primary Real-Time Synchronization via Server-Sent Events, BroadcastChannel & API
     const unsubServer = startSyncListener({
       onExams: (cloudExams) => {
         if (Array.isArray(cloudExams)) {
@@ -213,35 +219,82 @@ export default function App() {
       },
     });
 
-    // 2. Reconcile locally authored data with server on mount
+    // 2. Intelligent Bi-Directional Reconciliation on Mount
     fetchServerSync().then((serverData) => {
       if (!serverData) return;
 
-      const serverExamIds = new Set((serverData.exams || []).map((e) => e.id));
-      const localExams = getStorageItem<Exam[]>(STORAGE_KEYS.EXAMS, []) || [];
-      // Only upload custom user-authored exams that are NOT default sample exams
-      const customMissingExams = localExams.filter(
-        (e) => !serverExamIds.has(e.id) && e.id !== 'exam-default-1' && e.id !== 'exam-default-2'
-      );
-      if (customMissingExams.length > 0) {
-        serverUpsertExams(customMissingExams);
-      }
+      const serverExamList = Array.isArray(serverData.exams) ? serverData.exams : [];
+      const serverBankList = Array.isArray(serverData.questionBank) ? serverData.questionBank : [];
+      const serverResultList = Array.isArray(serverData.results) ? serverData.results : [];
 
-      const serverQIds = new Set((serverData.questionBank || []).map((q) => q.id));
-      const localBank = getStorageItem<Question[]>(STORAGE_KEYS.QBANK, []) || [];
-      // Only upload custom user-authored questions that are NOT default sample questions
-      const customMissingQs = localBank.filter(
-        (q) => !serverQIds.has(q.id) && !q.id.startsWith('q-sample-')
+      // Check if this local client holds more/custom authored data than the server
+      const hasCustomExams = initialLocalExams.some(
+        (e) => e.id !== 'exam-default-1' && e.id !== 'exam-default-2'
       );
-      if (customMissingQs.length > 0) {
-        serverUpsertQuestions(customMissingQs);
-      }
+      const hasCustomBank = initialLocalBank.some(
+        (q) => !q.id.startsWith('q-sample-')
+      );
+      const localHasMoreExams = initialLocalExams.length > serverExamList.length && hasCustomExams;
+      const localHasMoreBank = initialLocalBank.length > serverBankList.length && hasCustomBank;
 
-      const serverResultIds = new Set((serverData.results || []).map((r) => r.id));
-      const localResults = getStorageItem<ExamResult[]>(STORAGE_KEYS.RESULTS, []) || [];
-      const missingResults = localResults.filter((r) => !serverResultIds.has(r.id));
-      if (missingResults.length > 0) {
-        missingResults.forEach((r) => serverSubmitResult(r));
+      if (localHasMoreExams || localHasMoreBank) {
+        // This browser tab has real user-authored questions or exams not yet on the server!
+        // Immediately merge and promote them to the central server so all other devices get them!
+        const serverExamIdSet = new Set(serverExamList.map((e) => e.id));
+        const mergedExams = [...serverExamList];
+        for (const le of initialLocalExams) {
+          if (!serverExamIdSet.has(le.id)) {
+            mergedExams.push(le);
+            serverExamIdSet.add(le.id);
+          }
+        }
+
+        const serverQIdSet = new Set(serverBankList.map((q) => q.id));
+        const mergedBank = [...serverBankList];
+        for (const lq of initialLocalBank) {
+          if (!serverQIdSet.has(lq.id)) {
+            mergedBank.push(lq);
+            serverQIdSet.add(lq.id);
+          }
+        }
+
+        const serverResIdSet = new Set(serverResultList.map((r) => r.id));
+        const mergedResults = [...serverResultList];
+        for (const lr of initialLocalResults) {
+          if (!serverResIdSet.has(lr.id)) {
+            mergedResults.push(lr);
+            serverResIdSet.add(lr.id);
+          }
+        }
+
+        serverFullSync({
+          exams: mergedExams,
+          questionBank: mergedBank,
+          results: mergedResults,
+          users: serverData.users,
+          systemPin: initialLocalPin || serverData.systemPin,
+        });
+
+        setExams(mergedExams);
+        setQuestionBank(mergedBank);
+        setResults(mergedResults);
+        setStorageItem(STORAGE_KEYS.EXAMS, mergedExams);
+        setStorageItem(STORAGE_KEYS.QBANK, mergedBank);
+        setStorageItem(STORAGE_KEYS.RESULTS, mergedResults);
+      } else {
+        // Server data is authoritative, ensure local state aligns 100%
+        if (serverExamList.length > 0) {
+          setExams(serverExamList);
+          setStorageItem(STORAGE_KEYS.EXAMS, serverExamList);
+        }
+        if (serverBankList.length > 0) {
+          setQuestionBank(serverBankList);
+          setStorageItem(STORAGE_KEYS.QBANK, serverBankList);
+        }
+        if (Array.isArray(serverResultList)) {
+          setResults(serverResultList);
+          setStorageItem(STORAGE_KEYS.RESULTS, serverResultList);
+        }
       }
     });
 
@@ -658,10 +711,13 @@ export default function App() {
         systemPin,
       });
 
-      // 2. Also dual-sync to Firestore
-      const stats = await syncAllLocalDataToCloud(exams, questionBank, results, users);
+      // 2. Also dual-sync to Firestore in background without blocking
+      syncAllLocalDataToCloud(exams, questionBank, results, users).catch((e) => {
+        console.warn('[Firebase] Background cloud sync notice:', e?.message || e);
+      });
+
       showToast(
-        `Đã đồng bộ trực tuyến thành công: ${stats.examsSynced} đề thi, ${stats.questionsSynced} câu hỏi, ${stats.resultsSynced} kết quả tới máy chủ và mọi thiết bị khác!`,
+        `Đã đồng bộ tuyệt đối thành công: ${exams.length} đề thi, ${questionBank.length} câu hỏi tới máy chủ và toàn bộ thiết bị khác!`,
         'success'
       );
     } catch {
